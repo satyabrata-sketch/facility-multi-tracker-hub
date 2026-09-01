@@ -1,6 +1,7 @@
 @echo off
 setlocal
 title Facility Trackers - Firebase Cloud Live Sync Daemon
+set PYTHONUNBUFFERED=1
 
 echo ===============================================================================
 echo     Facility Multi-Tracker Hub - Firebase Cloud Continuous Sync
@@ -10,6 +11,6 @@ echo [*] Watching Excel files for modifications (non-locking)...
 echo [*] Changes will automatically sync to Firebase Cloud Firestore.
 echo.
 
-python firebase_sync.py --watch --interval 3
+python -u firebase_sync.py --watch --interval 2
 
 pause

@@ -7,6 +7,14 @@ import urllib.request
 import urllib.error
 import warnings
 
+# Ensure UTF-8 stdout on Windows console
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # Suppress harmless openpyxl data validation warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
@@ -47,8 +55,8 @@ def get_config_from_js():
 
 def sync_via_firebase_admin(payload: dict, cred_path: str = "serviceAccountKey.json"):
     """
-    Sync payload directly to Firebase Cloud Firestore using firebase-admin SDK.
-    Handles large datasets by chunking sheets if needed.
+    Sync payload to Firebase Cloud Firestore using Admin SDK.
+    Chunks large documents (>600 KB) to strictly respect Firestore's 1 MB document limit.
     """
     try:
         import firebase_admin
@@ -56,7 +64,7 @@ def sync_via_firebase_admin(payload: dict, cred_path: str = "serviceAccountKey.j
 
         cred_full_path = os.path.join(WORKSPACE_ROOT, cred_path) if not os.path.isabs(cred_path) else cred_path
         if not os.path.exists(cred_full_path):
-            print(f"[!] Service account key file not found at: {cred_full_path}")
+            print(f"[!] Service account key not found at: {cred_full_path}")
             return False
 
         if not firebase_admin._apps:
@@ -64,28 +72,29 @@ def sync_via_firebase_admin(payload: dict, cred_path: str = "serviceAccountKey.j
             firebase_admin.initialize_app(cred)
 
         db = firestore.client()
-        
-        # 1. Update live executive summary document
-        db.collection("facility_trackers").document("executive_summary").set(payload["executive_kpis"])
-        
-        # 2. Update each tracker document individually (with chunking for large datasets)
-        for tid, tdata in payload["trackers"].items():
-            if tdata.get("status") != "ok":
-                db.collection("facility_trackers").document(f"tracker_{tid}").set(tdata)
-                continue
 
-            raw_bytes = len(json.dumps(tdata, ensure_ascii=False).encode("utf-8"))
-            # If smaller than 600 KB, save directly
-            if raw_bytes < 600 * 1024:
-                db.collection("facility_trackers").document(f"tracker_{tid}").set(tdata)
+        # 1. Save Executive KPIs Document
+        db.collection("facility_trackers").document("executive_summary").set(payload["executive_kpis"])
+
+        # 2. Save each Tracker
+        for tid, tdata in payload["trackers"].items():
+            tdata_json = json.dumps(tdata, ensure_ascii=False)
+            tdata_bytes = len(tdata_json.encode("utf-8"))
+
+            if tdata_bytes < 650000:
+                # Small enough to store as single document
+                clean_tdata = dict(tdata)
+                clean_tdata["is_chunked"] = False
+                db.collection("facility_trackers").document(f"tracker_{tid}").set(clean_tdata)
             else:
-                # Chunk sheets to guarantee safety under Firestore's 1MB limit
+                # Large workbook -> Auto Chunking
                 sheets = tdata.get("data", {}).get("sheets", {})
                 chunked_tdata = {
                     "meta": tdata.get("meta", {}),
+                    "analytics": tdata.get("data", {}).get("analytics", {}),
                     "record_count": tdata.get("record_count", 0),
                     "open_count": tdata.get("open_count", 0),
-                    "status": "ok",
+                    "status": tdata.get("status", "ok"),
                     "is_chunked": True,
                     "data": {
                         "analytics": tdata.get("data", {}).get("analytics", {}),
@@ -164,17 +173,17 @@ def sync_via_firebase_rest(payload: dict, database_url: str, auth_secret: str = 
         print(f"[ERROR] Firebase REST sync failed: {e}")
         return False
 
-def run_watch_loop(interval_sec: int = 3, cred_path: str = "serviceAccountKey.json", db_url: str = None):
+def run_watch_loop(interval_sec: int = 2, cred_path: str = "serviceAccountKey.json", db_url: str = None):
     """Continuously monitor Excel files and auto-sync to Firebase on change."""
     print("=" * 70)
-    print("   🔥 Facility Multi-Tracker Firebase Cloud Continuous Sync Daemon")
+    print("   [LIVE SYNC] Facility Multi-Tracker Firebase Continuous Watcher")
     print("=" * 70)
     print(f"[*] Workspace Root: {WORKSPACE_ROOT}")
     print(f"[*] Polling interval: {interval_sec}s")
     
     cred_full_path = os.path.join(WORKSPACE_ROOT, cred_path) if not os.path.isabs(cred_path) else cred_path
     has_cred = os.path.exists(cred_full_path)
-    print(f"[*] Service Account Key: {cred_path} (Detected: {'YES' if has_cred else 'NO - Place serviceAccountKey.json in this folder'})")
+    print(f"[*] Service Account Key: {cred_path} (Detected: {'YES' if has_cred else 'NO'})")
     
     if not db_url:
         js_cfg = get_config_from_js()
@@ -189,7 +198,7 @@ def run_watch_loop(interval_sec: int = 3, cred_path: str = "serviceAccountKey.js
     cached_payload = load_local_payload()
     if os.path.exists(cred_full_path):
         sync_via_firebase_admin(cached_payload, cred_full_path)
-    print("\n[*] 🟢 LIVE WATCHER RUNNING. Watching for Excel edits or new files...")
+    print("\n[*] [RUNNING] LIVE WATCHER ACTIVE. Watching for Excel edits or new files...")
     print("[*] Keep this window open. When you edit any Excel file and press Ctrl+S,")
     print("    it will instantly reflect on your Vercel link worldwide in real time!\n")
 
@@ -217,7 +226,7 @@ def run_watch_loop(interval_sec: int = 3, cred_path: str = "serviceAccountKey.js
             if modified_trackers:
                 for tr in modified_trackers:
                     rel_p = tr.get("relative_path", os.path.basename(tr["path"]))
-                    print(f"\n[{time.strftime('%H:%M:%S')}] ⚡ Excel change detected: {rel_p}")
+                    print(f"\n[{time.strftime('%H:%M:%S')}] [CHANGE] Excel file modified: {rel_p}")
                 
                 # Re-parse and push
                 cached_payload = load_local_payload()
