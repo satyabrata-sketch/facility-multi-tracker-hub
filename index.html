@@ -1,515 +1,368 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en" class="h-full select-none">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Facility Multi-Tracker Operations Hub</title>
+  <title>Facility Multi-Tracker Excel Hub</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              50: '#f0fdf4',
-              100: '#dcfce7',
-              500: '#22c55e',
-              600: '#16a34a',
-              700: '#15803d',
-              800: '#166534',
-              900: '#14532d',
-            },
-            cbre: {
-              green: '#006A4E',
-              dark: '#0f172a',
-              accent: '#0284c7'
-            }
-          }
-        }
-      }
-    }
-  </script>
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- SheetJS for Complete Excel Import & Export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- SheetJS for Client-Side Excel Export & Import -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <!-- Client Firebase Config -->
+  <!-- Pre-compiled Data Fallback -->
   <script src="firebase-config.js"></script>
-  <!-- Embedded Initial Data -->
   <script src="data.js"></script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
-    body { font-family: 'Inter', sans-serif; }
+    @import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; }
     .font-mono { font-family: 'JetBrains Mono', monospace; }
-    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.4); border-radius: 9999px; }
-    .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(71, 85, 105, 0.5); }
-    .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); border: 1px solid rgba(226, 232, 240, 0.8); }
-    .dark .glass-card { background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(12px); border: 1px solid rgba(30, 41, 59, 0.8); }
-    .tab-btn.active { background-color: #006A4E; color: #ffffff; font-weight: 700; }
+    
+    /* Excel-style table and grid */
+    .excel-grid {
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    .excel-header-col {
+      background: #f3f2f1;
+      color: #323130;
+      font-weight: 600;
+      text-align: center;
+      border-right: 1px solid #d2d0ce;
+      border-bottom: 1px solid #d2d0ce;
+      font-size: 11px;
+      user-select: none;
+    }
+    .excel-header-row {
+      background: #f3f2f1;
+      color: #605e5c;
+      font-weight: 600;
+      text-align: center;
+      border-right: 1px solid #d2d0ce;
+      border-bottom: 1px solid #d2d0ce;
+      font-size: 11px;
+      user-select: none;
+      width: 45px;
+      min-width: 45px;
+    }
+    .excel-cell {
+      border-right: 1px solid #e1dfdd;
+      border-bottom: 1px solid #e1dfdd;
+      font-size: 12px;
+      color: #201f1e;
+      padding: 4px 8px;
+      white-space: nowrap;
+      outline: none;
+      background: #ffffff;
+    }
+    .excel-cell:focus {
+      outline: 2px solid #107c41 !important;
+      outline-offset: -2px;
+      background: #ffffff !important;
+      z-index: 10;
+    }
+    .excel-cell-edited {
+      background-color: #f0fdf4 !important;
+      font-weight: 600;
+      color: #166534;
+    }
+    .excel-th-data {
+      background: #006A4E;
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-right: 1px solid #00523c;
+      border-bottom: 2px solid #004533;
+      padding: 6px 10px;
+      white-space: nowrap;
+    }
+    
+    /* Excel Bottom Sheet Tab Styling */
+    .sheet-tab {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #605e5c;
+      background: #f3f2f1;
+      border-right: 1px solid #d2d0ce;
+      border-top: 2px solid transparent;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.1s ease;
+    }
+    .sheet-tab:hover {
+      background: #edebe9;
+      color: #201f1e;
+    }
+    .sheet-tab.active {
+      background: #ffffff;
+      color: #107c41;
+      font-weight: 700;
+      border-top: 3px solid #107c41;
+      box-shadow: 0 -2px 4px rgba(0,0,0,0.04);
+    }
+
+    /* Scrollbar */
+    .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f3f2f1; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #c8c6c4; border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #a19f9d; }
   </style>
 </head>
-<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-full flex flex-col transition-colors duration-200">
+<body class="bg-[#f3f2f1] text-[#201f1e] h-full flex flex-col overflow-hidden">
 
   <!-- ========================================================================= -->
-  <!-- TOP GLOBAL HEADER BAR -->
+  <!-- 1. EXCEL TOP TITLE & WORKBOOK RIBBON -->
   <!-- ========================================================================= -->
-  <header class="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
-    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3">
-      
-      <!-- Left: Logo & Live Status -->
+  <header class="bg-[#107c41] text-white flex-none shadow-md z-30">
+    
+    <!-- Title Bar -->
+    <div class="px-4 py-1.5 flex items-center justify-between border-b border-[#0b5a2f]">
       <div class="flex items-center space-x-3">
-        <div class="w-9 h-9 rounded-xl bg-emerald-700 flex items-center justify-center text-white shadow-md shadow-emerald-700/30">
-          <i data-lucide="layers" class="w-5 h-5"></i>
+        <div class="flex items-center space-x-1.5 font-bold text-sm tracking-wide">
+          <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M21.17 2.06A1.5 1.5 0 0 0 19.5 1H4.5A1.5 1.5 0 0 0 3 2.5v19A1.5 1.5 0 0 0 4.5 23h15a1.5 1.5 0 0 0 1.5-1.5V3.5a1.5 1.5 0 0 0-.83-1.44zM10.2 17.5l-2.1-3.6-2.1 3.6H4.2l3.2-5-3-4.8h1.9l2 3.4 2-3.4h1.9l-3 4.8 3.2 5zM20 21.5H4.5V2.5H20z"/></svg>
+          <span>Excel Live Hub</span>
         </div>
-        <div>
-          <div class="flex items-center space-x-2">
-            <h1 class="text-sm sm:text-base font-extrabold tracking-tight text-slate-900 dark:text-white">Facility Multi-Tracker Hub</h1>
-            <span id="live-connection-badge" class="flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span id="live-connection-text">Live Cloud</span>
-            </span>
-          </div>
-          <p class="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block">Unified Real-Time Operations Management</p>
+        <span class="text-xs opacity-70">|</span>
+        <div class="flex items-center space-x-2 text-xs font-semibold">
+          <span id="current-workbook-display-name">Breakdown Tracker.xlsx</span>
+          <span id="cloud-sync-status" class="flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] bg-[#0b5a2f] text-emerald-200">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="cloud-sync-status-text">Live Cloud Connected</span>
+          </span>
         </div>
       </div>
 
-      <!-- Right: Action Buttons -->
-      <div class="flex items-center space-x-2">
-        <!-- Add New Record Button (Dynamic for Active Tracker) -->
-        <button onclick="openAddRecordModal()" title="Add a new entry to the active tracker"
-          class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold shadow-sm shadow-emerald-600/30 transition cursor-pointer">
-          <i data-lucide="plus-circle" class="w-4 h-4"></i>
-          <span class="hidden sm:inline">Add Record</span>
+      <!-- Top Right Action Controls -->
+      <div class="flex items-center space-x-2 text-xs">
+        <button onclick="downloadCurrentExcelWorkbook()" title="Download current workbook as authentic .xlsx"
+          class="flex items-center space-x-1.5 px-3 py-1 rounded bg-[#0b5a2f] hover:bg-[#084222] font-semibold transition active:scale-95 cursor-pointer">
+          <i data-lucide="download" class="w-3.5 h-3.5"></i>
+          <span>Download .xlsx</span>
         </button>
 
-        <!-- Download Active Tracker Excel Button -->
-        <button onclick="downloadActiveTrackerExcel()" title="Download current tracker as Excel (.xlsx)"
-          class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold shadow-sm shadow-indigo-600/30 transition cursor-pointer">
-          <i data-lucide="download" class="w-4 h-4"></i>
-          <span class="hidden md:inline">Download .xlsx</span>
-        </button>
-
-        <!-- Download Master Consolidated Workbook -->
-        <button onclick="downloadMasterWorkbook()" title="Download All 6 Trackers in 1 Master Excel Workbook"
-          class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold border border-slate-300 dark:border-slate-700 transition cursor-pointer">
+        <button onclick="downloadMasterConsolidatedWorkbook()" title="Download all trackers in one consolidated master workbook"
+          class="flex items-center space-x-1.5 px-2.5 py-1 rounded bg-[#0b5a2f] hover:bg-[#084222] font-medium transition cursor-pointer">
           <i data-lucide="archive" class="w-3.5 h-3.5"></i>
-          <span class="hidden lg:inline">Master Workbook</span>
+          <span class="hidden md:inline">Master File</span>
         </button>
 
-        <!-- Upload / Drop Excel Tracker Button -->
-        <button onclick="openUploadModal()" title="Upload or Replace Excel Tracker File"
-          class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 active:scale-95 text-white text-xs font-semibold shadow-sm shadow-sky-600/30 transition cursor-pointer">
-          <i data-lucide="upload-cloud" class="w-3.5 h-3.5"></i>
-          <span class="hidden sm:inline">Upload</span>
+        <button onclick="document.getElementById('excel-upload-file-input').click()" title="Upload & sync modified .xlsx file"
+          class="flex items-center space-x-1.5 px-2.5 py-1 rounded bg-[#0b5a2f] hover:bg-[#084222] font-medium transition cursor-pointer">
+          <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">Upload .xlsx</span>
         </button>
-
-        <!-- Theme Toggle -->
-        <button onclick="toggleTheme()" title="Toggle Dark / Light Mode"
-          class="p-2 rounded-xl text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer">
-          <i data-lucide="moon" id="theme-icon" class="w-4 h-4"></i>
-        </button>
+        <input type="file" id="excel-upload-file-input" accept=".xlsx, .xlsm, .xls" class="hidden" onchange="handleExcelFileUpload(event)">
       </div>
-
     </div>
 
-    <!-- MAIN TRACKER NAVIGATION PILLS -->
-    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 border-t border-slate-100 dark:border-slate-800/80 overflow-x-auto custom-scrollbar py-1 flex items-center space-x-1.5 text-xs font-semibold">
+    <!-- Multi-Tracker Workbook Tabs (Select between the 6 Excel files) -->
+    <div class="bg-[#0e6b37] px-2 flex items-center space-x-1 overflow-x-auto custom-scrollbar text-xs font-semibold">
       
-      <button onclick="switchTrackerView('overview')" id="tab-nav-overview"
-        class="tab-btn active px-3 py-1.5 rounded-lg transition whitespace-nowrap cursor-pointer flex items-center space-x-1.5">
-        <i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i>
-        <span>📊 Overview Dashboard</span>
-      </button>
-
-      <button onclick="switchTrackerView('breakdown')" id="tab-nav-breakdown"
-        class="tab-btn px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap cursor-pointer flex items-center space-x-1.5">
+      <button onclick="switchWorkbook('breakdown')" id="wb-tab-breakdown"
+        class="wb-pill px-3 py-1.5 rounded-t transition whitespace-nowrap bg-white text-[#107c41] font-bold flex items-center space-x-1.5 cursor-pointer shadow-sm">
         <i data-lucide="wrench" class="w-3.5 h-3.5 text-amber-500"></i>
-        <span>Breakdown Tracker</span>
-        <span id="badge-nav-breakdown" class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">235</span>
+        <span>🛠️ Breakdown Tracker.xlsx</span>
+        <span id="badge-wb-breakdown" class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-800">235</span>
       </button>
 
-      <button onclick="switchTrackerView('locker')" id="tab-nav-locker"
-        class="tab-btn px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap cursor-pointer flex items-center space-x-1.5">
-        <i data-lucide="key" class="w-3.5 h-3.5 text-indigo-500"></i>
-        <span>Keys & Lockers</span>
-        <span id="badge-nav-locker" class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300">253</span>
+      <button onclick="switchWorkbook('locker')" id="wb-tab-locker"
+        class="wb-pill px-3 py-1.5 rounded-t transition whitespace-nowrap text-white hover:bg-[#0b5a2f] flex items-center space-x-1.5 cursor-pointer">
+        <i data-lucide="key" class="w-3.5 h-3.5 text-indigo-300"></i>
+        <span>🔐 Keys Lock Tracker - 2026.xlsx</span>
+        <span id="badge-wb-locker" class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-[#0b5a2f] text-emerald-200">253</span>
       </button>
 
-      <button onclick="switchTrackerView('events')" id="tab-nav-events"
-        class="tab-btn px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap cursor-pointer flex items-center space-x-1.5">
-        <i data-lucide="calendar" class="w-3.5 h-3.5 text-emerald-500"></i>
-        <span>Events (DT-3 & 4)</span>
-        <span id="badge-nav-events" class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">1,857</span>
+      <button onclick="switchWorkbook('events')" id="wb-tab-events"
+        class="wb-pill px-3 py-1.5 rounded-t transition whitespace-nowrap text-white hover:bg-[#0b5a2f] flex items-center space-x-1.5 cursor-pointer">
+        <i data-lucide="calendar" class="w-3.5 h-3.5 text-emerald-300"></i>
+        <span>🎪 Yearly Event Tracker.xlsx</span>
+        <span id="badge-wb-events" class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-[#0b5a2f] text-emerald-200">1,857</span>
       </button>
 
-      <button onclick="switchTrackerView('fnb')" id="tab-nav-fnb"
-        class="tab-btn px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap cursor-pointer flex items-center space-x-1.5">
-        <i data-lucide="utensils" class="w-3.5 h-3.5 text-rose-500"></i>
-        <span>F&B Operations</span>
-        <span id="badge-nav-fnb" class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300">63</span>
+      <button onclick="switchWorkbook('fnb')" id="wb-tab-fnb"
+        class="wb-pill px-3 py-1.5 rounded-t transition whitespace-nowrap text-white hover:bg-[#0b5a2f] flex items-center space-x-1.5 cursor-pointer">
+        <i data-lucide="utensils" class="w-3.5 h-3.5 text-rose-300"></i>
+        <span>🍽️ F&B Event Tracker.xlsx</span>
+        <span id="badge-wb-fnb" class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-[#0b5a2f] text-emerald-200">63</span>
       </button>
 
-      <button onclick="switchTrackerView('staff')" id="tab-nav-staff"
-        class="tab-btn px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap cursor-pointer flex items-center space-x-1.5">
-        <i data-lucide="users" class="w-3.5 h-3.5 text-sky-500"></i>
-        <span>Contractual Staff</span>
-        <span id="badge-nav-staff" class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300">449</span>
+      <button onclick="switchWorkbook('staff')" id="wb-tab-staff"
+        class="wb-pill px-3 py-1.5 rounded-t transition whitespace-nowrap text-white hover:bg-[#0b5a2f] flex items-center space-x-1.5 cursor-pointer">
+        <i data-lucide="users" class="w-3.5 h-3.5 text-sky-300"></i>
+        <span>👥 Contractual Staff Details.xlsx</span>
+        <span id="badge-wb-staff" class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-[#0b5a2f] text-emerald-200">449</span>
       </button>
 
-      <button onclick="switchTrackerView('energy')" id="tab-nav-energy"
-        class="tab-btn px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap cursor-pointer flex items-center space-x-1.5">
-        <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-500"></i>
-        <span>Energy Consumption</span>
-        <span id="badge-nav-energy" class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">400+</span>
+      <button onclick="switchWorkbook('energy')" id="wb-tab-energy"
+        class="wb-pill px-3 py-1.5 rounded-t transition whitespace-nowrap text-white hover:bg-[#0b5a2f] flex items-center space-x-1.5 cursor-pointer">
+        <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-300"></i>
+        <span>⚡ Daily Energy Consumption.xlsx</span>
+        <span id="badge-wb-energy" class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-[#0b5a2f] text-emerald-200">400+</span>
       </button>
 
-      <!-- Dynamic Custom Trackers Container -->
-      <div id="dynamic-nav-pills" class="flex space-x-1.5"></div>
+      <!-- Dynamic Extra Trackers Container -->
+      <div id="dynamic-wb-tabs" class="flex space-x-1"></div>
 
     </div>
+
   </header>
 
   <!-- ========================================================================= -->
-  <!-- MAIN APP VIEWPORT -->
+  <!-- 2. EXCEL FORMULA & ACTION TOOLBAR -->
   <!-- ========================================================================= -->
-  <main class="flex-1 max-w-[1600px] w-full mx-auto p-4 sm:p-6 space-y-6">
-
-    <!-- ========================================================================= -->
-    <!-- VIEW 1: EXECUTIVE OVERVIEW DASHBOARD -->
-    <!-- ========================================================================= -->
-    <section id="view-overview" class="space-y-6">
+  <div class="bg-[#f3f2f1] border-b border-[#d2d0ce] px-4 py-1.5 flex flex-wrap items-center justify-between gap-2 text-xs flex-none">
+    
+    <!-- Left: Formula Box -->
+    <div class="flex items-center space-x-2 flex-1 min-w-[280px]">
+      <!-- Active Cell Name Box (e.g. A1) -->
+      <div class="bg-white border border-[#8a8886] rounded px-2.5 py-1 font-mono text-center font-bold text-[#323130] min-w-[55px] shadow-inner" id="excel-name-box">
+        A1
+      </div>
       
-      <!-- KPI Stats Grid -->
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-        
-        <div class="glass-card rounded-2xl p-4 shadow-sm border-l-4 border-l-emerald-600">
-          <div class="flex items-center justify-between">
-            <span class="text-[11px] font-bold text-slate-500 uppercase">Total Records</span>
-            <i data-lucide="database" class="w-4 h-4 text-emerald-600"></i>
-          </div>
-          <div class="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-1" id="kpi-total-records">5,082</div>
-          <div class="text-[10px] text-emerald-600 font-semibold mt-0.5">Across 6 Trackers</div>
-        </div>
-
-        <div class="glass-card rounded-2xl p-4 shadow-sm border-l-4 border-l-amber-500">
-          <div class="flex items-center justify-between">
-            <span class="text-[11px] font-bold text-slate-500 uppercase">Breakdowns</span>
-            <i data-lucide="wrench" class="w-4 h-4 text-amber-500"></i>
-          </div>
-          <div class="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-1" id="kpi-breakdown-count">235</div>
-          <div class="text-[10px] text-amber-600 font-semibold mt-0.5" id="kpi-breakdown-sla">95.7% Resolution Rate</div>
-        </div>
-
-        <div class="glass-card rounded-2xl p-4 shadow-sm border-l-4 border-l-indigo-500">
-          <div class="flex items-center justify-between">
-            <span class="text-[11px] font-bold text-slate-500 uppercase">Locks & Keys</span>
-            <i data-lucide="key" class="w-4 h-4 text-indigo-500"></i>
-          </div>
-          <div class="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-1" id="kpi-locker-units">253</div>
-          <div class="text-[10px] text-indigo-600 font-semibold mt-0.5" id="kpi-locker-actions">20 Action Items</div>
-        </div>
-
-        <div class="glass-card rounded-2xl p-4 shadow-sm border-l-4 border-l-emerald-500">
-          <div class="flex items-center justify-between">
-            <span class="text-[11px] font-bold text-slate-500 uppercase">Yearly Events</span>
-            <i data-lucide="calendar" class="w-4 h-4 text-emerald-500"></i>
-          </div>
-          <div class="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-1" id="kpi-events-count">1,857</div>
-          <div class="text-[10px] text-emerald-600 font-semibold mt-0.5" id="kpi-events-confirmed">1,192 Confirmed</div>
-        </div>
-
-        <div class="glass-card rounded-2xl p-4 shadow-sm border-l-4 border-l-rose-500">
-          <div class="flex items-center justify-between">
-            <span class="text-[11px] font-bold text-slate-500 uppercase">F&B Catering</span>
-            <i data-lucide="utensils" class="w-4 h-4 text-rose-500"></i>
-          </div>
-          <div class="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-1" id="kpi-fnb-spend">₹2.48M</div>
-          <div class="text-[10px] text-rose-600 font-semibold mt-0.5" id="kpi-fnb-events">63 Events Hosted</div>
-        </div>
-
-        <div class="glass-card rounded-2xl p-4 shadow-sm border-l-4 border-l-sky-500">
-          <div class="flex items-center justify-between">
-            <span class="text-[11px] font-bold text-slate-500 uppercase">Staff Headcount</span>
-            <i data-lucide="users" class="w-4 h-4 text-sky-500"></i>
-          </div>
-          <div class="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-1" id="kpi-staff-count">449</div>
-          <div class="text-[10px] text-sky-600 font-semibold mt-0.5" id="kpi-staff-active">229 Active On-Duty</div>
-        </div>
-
-      </div>
-
-      <!-- Quick Action Cards Grid for Each Tracker -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="overview-tracker-cards">
-        <!-- JS Rendered Cards -->
-      </div>
-
-      <!-- Interactive Charts Row -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="glass-card rounded-2xl p-5 shadow-sm space-y-3">
-          <h3 class="text-xs font-bold text-slate-900 dark:text-white flex items-center space-x-2">
-            <i data-lucide="bar-chart-2" class="w-4 h-4 text-emerald-600"></i>
-            <span>Breakdown Incidents by Category</span>
-          </h3>
-          <div class="h-64 relative">
-            <canvas id="chart-breakdown-cats"></canvas>
-          </div>
-        </div>
-
-        <div class="glass-card rounded-2xl p-5 shadow-sm space-y-3">
-          <h3 class="text-xs font-bold text-slate-900 dark:text-white flex items-center space-x-2">
-            <i data-lucide="pie-chart" class="w-4 h-4 text-indigo-600"></i>
-            <span>Staff Headcount by Contractor Agency</span>
-          </h3>
-          <div class="h-64 relative">
-            <canvas id="chart-staff-contractor"></canvas>
-          </div>
-        </div>
-      </div>
-
-    </section>
-
-    <!-- ========================================================================= -->
-    <!-- VIEW 2: UNIFIED INTERACTIVE TRACKER WORKSHEET -->
-    <!-- ========================================================================= -->
-    <section id="view-tracker-detail" class="hidden space-y-4">
+      <!-- fx Symbol -->
+      <span class="font-bold text-[#605e5c] italic text-sm select-none">fx</span>
       
-      <!-- Tracker Header Banner -->
-      <div class="glass-card rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div class="flex items-center space-x-3">
-          <div id="tdetail-icon-container" class="p-3 rounded-2xl bg-emerald-600 text-white shadow-md">
-            <i data-lucide="wrench" id="tdetail-icon" class="w-6 h-6"></i>
-          </div>
-          <div>
-            <div class="flex items-center space-x-2">
-              <h2 id="tdetail-title" class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Breakdown Tracker</h2>
-              <span id="tdetail-category-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">Category</span>
-            </div>
-            <p id="tdetail-subtitle" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">235 Total Records Tracked • Live Cloud Synchronized</p>
-          </div>
-        </div>
-
-        <!-- Sheet Action Buttons -->
-        <div class="flex flex-wrap items-center gap-2">
-          <button onclick="openAddRecordModal()"
-            class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition cursor-pointer">
-            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-            <span>Add Row</span>
-          </button>
-
-          <button id="btn-push-sheet-edits" onclick="pushCurrentSheetEditsLive()" disabled
-            class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold shadow-sm transition cursor-pointer">
-            <i data-lucide="send" class="w-3.5 h-3.5"></i>
-            <span id="btn-push-sheet-label">Push Changes Live</span>
-          </button>
-
-          <button onclick="downloadActiveTrackerExcel()"
-            class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition cursor-pointer">
-            <i data-lucide="download" class="w-3.5 h-3.5"></i>
-            <span>Export .xlsx</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Main Worksheet Data Table Container -->
-      <div class="glass-card rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-        
-        <!-- Multi-Sheet Switcher Bar -->
-        <div class="p-3 bg-slate-50/80 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 overflow-x-auto custom-scrollbar">
-          <div class="flex items-center space-x-1.5" id="tdetail-sheet-tabs">
-            <!-- Sheet tab buttons populated via JS -->
-          </div>
-
-          <div class="flex items-center space-x-2 text-[11px] text-slate-500 whitespace-nowrap">
-            <span id="tdetail-unsaved-badge" class="hidden px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">0 Unsaved Edits</span>
-            <span>💡 Click any cell to edit directly</span>
-          </div>
-        </div>
-
-        <!-- Search & Filter Controls -->
-        <div class="p-3 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs bg-white dark:bg-slate-900">
-          <div class="relative w-full sm:w-80">
-            <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400"></i>
-            <input type="text" id="tdetail-search" oninput="handleTableSearch()" placeholder="Search across all columns..."
-              class="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs">
-          </div>
-
-          <div class="flex items-center space-x-2 text-xs text-slate-500 w-full sm:w-auto justify-between sm:justify-end">
-            <span>Page Size:</span>
-            <select id="tdetail-pagesize" onchange="handlePageSizeChange(this.value)"
-              class="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-semibold focus:outline-none text-xs">
-              <option value="15">15 rows</option>
-              <option value="25" selected>25 rows</option>
-              <option value="50">50 rows</option>
-              <option value="100">100 rows</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Interactive Table Grid -->
-        <div class="overflow-x-auto max-h-[600px] custom-scrollbar">
-          <table class="w-full text-left text-xs border-collapse" id="tdetail-table">
-            <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-300 font-bold sticky top-0 z-10 shadow-sm" id="tdetail-thead">
-              <!-- JS Generated Headers -->
-            </thead>
-            <tbody class="divide-y divide-slate-100 dark:divide-slate-800/70" id="tdetail-tbody">
-              <!-- JS Generated Rows -->
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Pagination Footer -->
-        <div class="p-3 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs bg-slate-50 dark:bg-slate-900/80">
-          <div class="text-slate-500">
-            Showing <span id="tdetail-page-start" class="font-bold text-slate-800 dark:text-slate-200">1</span> - <span id="tdetail-page-end" class="font-bold text-slate-800 dark:text-slate-200">25</span> of <span id="tdetail-page-total" class="font-bold text-slate-800 dark:text-slate-200">0</span> records
-          </div>
-          <div class="flex items-center space-x-2">
-            <button onclick="changeTablePage(-1)" id="btn-tdetail-prev"
-              class="px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-semibold disabled:opacity-40 cursor-pointer">
-              Previous
-            </button>
-            <span id="tdetail-page-current" class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold text-xs">1</span>
-            <button onclick="changeTablePage(1)" id="btn-tdetail-next"
-              class="px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-semibold disabled:opacity-40 cursor-pointer">
-              Next
-            </button>
-          </div>
-        </div>
-
-      </div>
-
-    </section>
-
-  </main>
-
-  <!-- ========================================================================= -->
-  <!-- MODAL: DYNAMIC ADD RECORD FORM -->
-  <!-- ========================================================================= -->
-  <div id="modal-add-record" class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="glass-card max-w-xl w-full rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
-      
-      <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
-        <div class="flex items-center space-x-2">
-          <div class="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-600">
-            <i data-lucide="plus-circle" class="w-5 h-5"></i>
-          </div>
-          <div>
-            <h3 class="text-sm font-bold text-slate-900 dark:text-white" id="modal-add-title">Add New Entry</h3>
-            <p class="text-[11px] text-slate-500" id="modal-add-subtitle">Direct Cloud Real-Time Update</p>
-          </div>
-        </div>
-        <button onclick="closeAddRecordModal()" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-      </div>
-
-      <!-- Dynamic Form Fields Container -->
-      <form id="form-add-record" onsubmit="handleRecordFormSubmit(event)" class="space-y-3 text-xs">
-        <div id="form-fields-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <!-- Populated dynamically via JS -->
-        </div>
-
-        <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
-          <button type="button" onclick="closeAddRecordModal()"
-            class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-800 dark:text-slate-200 font-semibold cursor-pointer">
-            Cancel
-          </button>
-          <button type="submit" id="btn-submit-record"
-            class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/30 transition cursor-pointer">
-            Save & Sync Live
-          </button>
-        </div>
-      </form>
-
+      <!-- Formula Bar Input -->
+      <input type="text" id="excel-formula-bar" placeholder="Selected cell value or formula..."
+        class="flex-1 bg-white border border-[#8a8886] rounded px-2.5 py-1 text-xs text-[#201f1e] focus:outline-none focus:border-[#107c41] shadow-inner"
+        oninput="handleFormulaBarInput(this.value)" onkeydown="handleFormulaBarKeyDown(event)">
     </div>
+
+    <!-- Right: Spreadsheet Actions -->
+    <div class="flex items-center space-x-2">
+      <!-- Search Input -->
+      <div class="relative w-48 sm:w-60">
+        <i data-lucide="search" class="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400"></i>
+        <input type="text" id="sheet-search-input" oninput="handleSheetSearch(this.value)" placeholder="Search worksheet..."
+          class="w-full pl-8 pr-6 py-1 rounded bg-white border border-[#8a8886] focus:outline-none focus:border-[#107c41] text-xs">
+      </div>
+
+      <!-- Add New Row Button -->
+      <button onclick="insertNewRowToCurrentSheet()" title="Insert new blank row at the top"
+        class="flex items-center space-x-1 px-2.5 py-1 rounded bg-white border border-[#8a8886] hover:bg-[#edebe9] text-[#201f1e] font-semibold shadow-sm transition cursor-pointer">
+        <i data-lucide="plus" class="w-3.5 h-3.5 text-emerald-600"></i>
+        <span>Insert Row</span>
+      </button>
+
+      <!-- Save & Push Live Button -->
+      <button id="btn-push-live" onclick="pushChangesLiveToFirebase()" disabled
+        class="flex items-center space-x-1.5 px-3 py-1 rounded bg-[#107c41] hover:bg-[#0e6b37] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold shadow-sm transition cursor-pointer">
+        <i data-lucide="send" class="w-3.5 h-3.5"></i>
+        <span id="btn-push-live-text">Push Changes Live</span>
+      </button>
+    </div>
+
   </div>
 
   <!-- ========================================================================= -->
-  <!-- MODAL: UPLOAD / DRAG & DROP EXCEL FILE -->
+  <!-- 3. MAIN SPREADSHEET GRID (THE ACTUAL EXCEL SHEET) -->
   <!-- ========================================================================= -->
-  <div id="modal-upload" class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="glass-card max-w-lg w-full rounded-2xl p-6 shadow-2xl space-y-4">
+  <div class="flex-1 overflow-auto custom-scrollbar bg-white relative" id="grid-scroll-container">
+    <table class="excel-grid min-w-full" id="main-excel-table">
       
-      <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
-        <div class="flex items-center space-x-2">
-          <div class="p-2 rounded-lg bg-sky-100 dark:bg-sky-950 text-sky-600">
-            <i data-lucide="upload-cloud" class="w-5 h-5"></i>
-          </div>
-          <div>
-            <h3 class="text-sm font-bold text-slate-900 dark:text-white">Upload / Sync Excel Tracker</h3>
-            <p class="text-[11px] text-slate-500">Drop your modified .xlsx file to broadcast updates to everyone</p>
-          </div>
-        </div>
-        <button onclick="closeUploadModal()" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-      </div>
+      <!-- Excel Header Row (A, B, C, D, ...) -->
+      <thead id="excel-thead-letters" class="sticky top-0 z-20">
+        <!-- Generated via JS -->
+      </thead>
 
-      <div class="space-y-4 text-xs">
-        <div id="drop-zone" class="border-2 border-dashed border-sky-300 dark:border-sky-700/60 hover:border-sky-500 rounded-2xl p-6 text-center bg-sky-50/50 dark:bg-sky-950/20 transition cursor-pointer flex flex-col items-center justify-center"
-             onclick="document.getElementById('file-upload-input').click()"
-             ondragover="handleDragOver(event)"
-             ondragleave="handleDragLeave(event)"
-             ondrop="handleFileDrop(event)">
-          <input type="file" id="file-upload-input" accept=".xlsx, .xlsm, .xls, .csv" class="hidden" onchange="handleFileSelect(event)">
-          <div class="w-12 h-12 rounded-full bg-sky-100 dark:bg-sky-900/60 flex items-center justify-center text-sky-600 mb-2">
-            <i data-lucide="file-spreadsheet" class="w-6 h-6"></i>
-          </div>
-          <p class="text-xs font-bold text-slate-800 dark:text-slate-200">Click to browse or drop .xlsx tracker here</p>
-          <p class="text-[11px] text-slate-500 mt-1">Breakdown, Keys, Events, F&B, Staff, Energy or any Custom Tracker</p>
-          <div id="upload-status" class="mt-3 font-semibold text-emerald-600 hidden"></div>
-        </div>
+      <!-- Exact Tracker Column Headers (Sr. No., Start Date, Asset, Status, ...) -->
+      <thead id="excel-thead-data" class="sticky top-[24px] z-10">
+        <!-- Generated via JS -->
+      </thead>
 
-        <div id="upload-preview" class="hidden p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-          <div class="font-bold text-slate-900 dark:text-white" id="upload-file-name">filename.xlsx</div>
-          <div class="text-slate-500 text-[11px] mt-0.5" id="upload-file-stats">0 sheets | 0 rows</div>
-        </div>
-      </div>
+      <!-- Spreadsheet Body Rows -->
+      <tbody id="excel-tbody-rows">
+        <!-- Generated via JS -->
+      </tbody>
 
-      <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-between">
-        <button id="btn-confirm-upload" onclick="processAndSyncExcel()" disabled
-          class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold shadow-sm transition cursor-pointer">
-          Parse & Broadcast Live
-        </button>
-        <button onclick="closeUploadModal()" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-800 dark:text-slate-200 font-semibold cursor-pointer">
-          Close
-        </button>
-      </div>
-
-    </div>
+    </table>
   </div>
 
-  <!-- TOAST NOTIFICATION CONTAINER -->
-  <div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-2 pointer-events-none"></div>
+  <!-- ========================================================================= -->
+  <!-- 4. EXCEL BOTTOM SHEET TABS BAR & STATUS BAR -->
+  <!-- ========================================================================= -->
+  <footer class="bg-[#f3f2f1] border-t border-[#d2d0ce] flex flex-col flex-none z-20">
+    
+    <!-- Sheet Tabs Bar (Just like Microsoft Excel) -->
+    <div class="flex items-center justify-between border-b border-[#e1dfdd] bg-[#f3f2f1] px-2 overflow-x-auto custom-scrollbar">
+      
+      <div class="flex items-center space-x-0.5" id="bottom-sheet-tabs-container">
+        <!-- Sheet tab buttons populated via JS (e.g. 🛠️ Breakdown Tracker 2026, 🔐 Master Tracker, ⚠️ Action List) -->
+      </div>
+
+      <!-- Add Custom Sheet Tab Button -->
+      <button onclick="createNewSheetInCurrentTracker()" title="Add new sheet to this tracker"
+        class="px-2 py-1 text-slate-500 hover:text-[#107c41] hover:bg-[#edebe9] rounded text-xs font-bold transition cursor-pointer flex items-center space-x-1">
+        <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+        <span>New Sheet</span>
+      </button>
+
+    </div>
+
+    <!-- Status Bar -->
+    <div class="px-4 py-1 flex items-center justify-between text-[11px] text-[#605e5c] font-medium select-none bg-[#f3f2f1]">
+      <div class="flex items-center space-x-3">
+        <span id="status-mode" class="font-bold text-[#107c41]">Ready</span>
+        <span>•</span>
+        <span id="status-record-count">235 Records</span>
+        <span>•</span>
+        <span id="status-unsaved-badge" class="hidden font-bold text-amber-700">0 Unsaved Edits</span>
+      </div>
+
+      <div class="flex items-center space-x-4">
+        <span id="status-selection-info">Selected: Cell A1</span>
+        <span>•</span>
+        <span class="flex items-center space-x-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          <span>100% Zoom</span>
+        </span>
+      </div>
+    </div>
+
+  </footer>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-12 right-5 z-50 space-y-2 pointer-events-none"></div>
 
   <!-- ========================================================================= -->
-  <!-- APPLICATION SCRIPT & FIREBASE ENGINE -->
+  <!-- 5. JAVASCRIPT CONTROLLER & REAL-TIME SPREADSHEET ENGINE -->
   <!-- ========================================================================= -->
   <script>
-    // Global Application State
+    // Application State
     let APP_DATA = null;
-    let ACTIVE_TRACKER_ID = 'overview';
-    let ACTIVE_SHEET_NAME = '';
-    let CURRENT_PAGE = 1;
-    let PAGE_SIZE = 25;
-    let SEARCH_QUERY = '';
+    let ACTIVE_WORKBOOK_ID = 'breakdown';
+    let ACTIVE_SHEET_KEY = '';
+    let SELECTED_ROW_IDX = 0;
+    let SELECTED_COL_NAME = '';
+    let SHEET_SEARCH_TERM = '';
     let PENDING_EDITS = {}; // { rowIdx: { colName: val } }
-    let FIREBASE_APP = null;
     let FIREBASE_DB = null;
     let IS_CONNECTED = false;
-    let CHARTS = {};
 
-    // 1. Initialize Firebase Cloud Backend
-    function initFirebaseBackend() {
+    // Excel Column Letter Generator (0 -> A, 1 -> B, ..., 26 -> AA)
+    function getExcelColLetter(n) {
+      let result = '';
+      n += 1;
+      while (n > 0) {
+        let remainder = (n - 1) % 26;
+        result = String.fromCharCode(65 + remainder) + result;
+        n = Math.floor((n - 1) / 26);
+      }
+      return result;
+    }
+
+    // 1. Initialize Firebase Real-Time Cloud
+    function initFirebaseCloud() {
       try {
         let config = null;
         if (typeof FIREBASE_CONFIG !== 'undefined' && FIREBASE_CONFIG && FIREBASE_CONFIG.projectId) {
@@ -526,16 +379,14 @@
         }
 
         if (!firebase.apps.length) {
-          FIREBASE_APP = firebase.initializeApp(config);
-        } else {
-          FIREBASE_APP = firebase.app();
+          firebase.initializeApp(config);
         }
 
         FIREBASE_DB = firebase.firestore();
         IS_CONNECTED = true;
-        updateCloudStatusBadge(true, 'Live Cloud (Connected)');
+        updateSyncStatusUI(true, 'Live Cloud Connected');
 
-        // Real-Time Listener on facility_trackers collection
+        // Continuous Firestore Listener
         FIREBASE_DB.collection('facility_trackers').onSnapshot(snapshot => {
           let updated = false;
           if (!APP_DATA) APP_DATA = { executive_kpis: {}, trackers: {} };
@@ -555,6 +406,7 @@
               const tid = docId.replace('tracker_', '');
               const tdata = snapshotDocs[docId];
 
+              // Reassemble chunked sheets if present
               if (tdata.is_chunked && tdata.data && tdata.data.sheets_manifest) {
                 tdata.data.sheets = {};
                 for (let sname in tdata.data.sheets_manifest) {
@@ -579,417 +431,276 @@
           }
 
           if (updated) {
-            renderApp();
+            renderSpreadsheetView();
           }
         }, err => {
-          console.warn('[Firebase Listener Error]:', err);
-          updateCloudStatusBadge(false, 'Offline / Cache Mode');
+          console.warn('[Firebase Listener Warning]:', err);
+          updateSyncStatusUI(false, 'Local Data Mode');
         });
 
       } catch (err) {
         console.warn('Firebase init error:', err);
-        updateCloudStatusBadge(false, 'Local Data Mode');
+        updateSyncStatusUI(false, 'Local Cache Mode');
       }
     }
 
-    function updateCloudStatusBadge(isLive, text) {
-      const badge = document.getElementById('live-connection-badge');
-      const label = document.getElementById('live-connection-text');
-      if (badge && label) {
-        label.innerText = text;
-        badge.className = isLive 
-          ? 'flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-          : 'flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
-      }
+    function updateSyncStatusUI(isLive, msg) {
+      const el = document.getElementById('cloud-sync-status-text');
+      if (el) el.innerText = msg;
     }
 
-    // 2. Main Render Engine
-    function renderApp() {
+    // 2. Switch Workbook (e.g. Breakdown, Keys & Lockers, Events, F&B, Staff, Energy)
+    function switchWorkbook(workbookId) {
+      ACTIVE_WORKBOOK_ID = workbookId;
+      ACTIVE_SHEET_KEY = '';
+      PENDING_EDITS = {};
+      SHEET_SEARCH_TERM = '';
+      SELECTED_ROW_IDX = 0;
+      SELECTED_COL_NAME = '';
+      document.getElementById('sheet-search-input').value = '';
+      updatePendingEditsUI();
+
+      // Update Top Workbook Pill Tabs
+      document.querySelectorAll('.wb-pill').forEach(btn => {
+        btn.classList.remove('bg-white', 'text-[#107c41]', 'font-bold');
+        btn.classList.add('text-white', 'hover:bg-[#0b5a2f]');
+      });
+      const activeBtn = document.getElementById(`wb-tab-${workbookId}`);
+      if (activeBtn) {
+        activeBtn.classList.add('bg-white', 'text-[#107c41]', 'font-bold');
+        activeBtn.classList.remove('text-white', 'hover:bg-[#0b5a2f]');
+      }
+
+      renderSpreadsheetView();
+    }
+
+    // 3. Render the Authentic Spreadsheet View
+    function renderSpreadsheetView() {
       if (!APP_DATA || !APP_DATA.trackers) return;
 
-      renderExecutiveKPIs();
-      renderOverviewCards();
-      renderOverviewCharts();
-      renderNavBadges();
+      const curTracker = APP_DATA.trackers[ACTIVE_WORKBOOK_ID];
+      if (!curTracker || !curTracker.data) return;
 
-      if (ACTIVE_TRACKER_ID !== 'overview') {
-        renderTrackerWorksheet(ACTIVE_TRACKER_ID);
+      // Update Title Bar Display Name
+      const displayName = curTracker.meta?.filename || `${curTracker.meta?.short_title || ACTIVE_WORKBOOK_ID}.xlsx`;
+      document.getElementById('current-workbook-display-name').innerText = displayName;
+
+      // Render Badge Counts
+      for (let tid in APP_DATA.trackers) {
+        const badge = document.getElementById(`badge-wb-${tid}`);
+        if (badge) {
+          badge.innerText = (APP_DATA.trackers[tid].record_count || 0).toLocaleString();
+        }
       }
+
+      // Populate Bottom Sheet Tabs Bar (Authentic Excel Tabs)
+      const sheets = curTracker.data.sheets || {};
+      const sheetKeys = Object.keys(sheets);
+      if (!sheetKeys.includes(ACTIVE_SHEET_KEY)) {
+        ACTIVE_SHEET_KEY = sheetKeys[0] || '';
+      }
+
+      const bottomTabsContainer = document.getElementById('bottom-sheet-tabs-container');
+      bottomTabsContainer.innerHTML = '';
+
+      sheetKeys.forEach(sname => {
+        const isActive = (sname === ACTIVE_SHEET_KEY);
+        const sdata = sheets[sname];
+        const rowCount = sdata?.rows?.length || 0;
+
+        const tabBtn = document.createElement('div');
+        tabBtn.className = `sheet-tab ${isActive ? 'active' : ''}`;
+        tabBtn.innerHTML = `
+          <span>${sdata.sheet_name || sname}</span>
+          <span class="ml-1.5 text-[10px] opacity-60">(${rowCount.toLocaleString()})</span>
+        `;
+        tabBtn.onclick = () => {
+          ACTIVE_SHEET_KEY = sname;
+          PENDING_EDITS = {};
+          SELECTED_ROW_IDX = 0;
+          SELECTED_COL_NAME = '';
+          updatePendingEditsUI();
+          renderSpreadsheetGrid();
+        };
+        bottomTabsContainer.appendChild(tabBtn);
+      });
+
+      renderSpreadsheetGrid();
       lucide.createIcons();
     }
 
-    function renderExecutiveKPIs() {
-      const kpis = APP_DATA.executive_kpis || {};
-      const elRec = document.getElementById('kpi-total-records');
-      const elBd = document.getElementById('kpi-breakdown-count');
-      const elBdSla = document.getElementById('kpi-breakdown-sla');
-      const elLk = document.getElementById('kpi-locker-units');
-      const elLkAct = document.getElementById('kpi-locker-actions');
-      const elEv = document.getElementById('kpi-events-count');
-      const elEvConf = document.getElementById('kpi-events-confirmed');
-      const elFnB = document.getElementById('kpi-fnb-spend');
-      const elFnBEv = document.getElementById('kpi-fnb-events');
-      const elSt = document.getElementById('kpi-staff-count');
-      const elStAct = document.getElementById('kpi-staff-active');
+    // 4. Render the Excel Grid Table
+    function renderSpreadsheetGrid() {
+      const curTracker = APP_DATA?.trackers?.[ACTIVE_WORKBOOK_ID];
+      if (!curTracker || !curTracker.data) return;
 
-      if (elRec) elRec.innerText = (kpis.total_records_tracked || 5082).toLocaleString();
-      if (elBd) elBd.innerText = kpis.breakdown_incidents_2026 || 235;
-      if (elBdSla) elBdSla.innerText = `${kpis.breakdown_resolution_rate || '95.7%'} Resolved`;
-      if (elLk) elLk.innerText = kpis.total_lock_units || 253;
-      if (elLkAct) elLkAct.innerText = `${kpis.pending_audit_actions || 20} Action Items`;
-      if (elEv) elEv.innerText = (kpis.total_events_2026 || 1857).toLocaleString();
-      if (elEvConf) elEvConf.innerText = `${kpis.events_confirmed || 1192} Confirmed`;
-      if (elFnB) elFnB.innerText = kpis.fnb_total_spend || '₹2.48M';
-      if (elFnBEv) elFnBEv.innerText = `${kpis.fnb_total_events || 63} Events Hosted`;
-      if (elSt) elSt.innerText = kpis.total_staff_headcount || 449;
-      if (elStAct) elStAct.innerText = `${kpis.staff_active || 229} Active On-Duty`;
-    }
-
-    function renderNavBadges() {
-      const trs = APP_DATA.trackers || {};
-      for (let tid in trs) {
-        const badge = document.getElementById(`badge-nav-${tid}`);
-        if (badge) {
-          badge.innerText = (trs[tid].record_count || 0).toLocaleString();
-        }
-      }
-    }
-
-    function renderOverviewCards() {
-      const container = document.getElementById('overview-tracker-cards');
-      if (!container || !APP_DATA.trackers) return;
-
-      const trackers = APP_DATA.trackers;
-      container.innerHTML = '';
-
-      const trackerMetaConfig = [
-        { id: 'breakdown', title: 'Equipment Breakdown Tracker', icon: 'wrench', color: 'amber', desc: 'Equipment malfunctions, downtime, SLA resolution tracking' },
-        { id: 'locker', title: 'Keys & Lockers Custody Matrix', icon: 'key', color: 'indigo', desc: 'Lock register, keys custody, audit action items' },
-        { id: 'events', title: 'Yearly Events Tracker (DT-3 & 4)', icon: 'calendar', color: 'emerald', desc: 'Annual event bookings, room scheduling, attendance' },
-        { id: 'fnb', title: 'F&B Operations & Spend Tracker', icon: 'utensils', color: 'rose', desc: 'Event catering expenses, per-head costs, catering partners' },
-        { id: 'staff', title: 'Contractual Staff Deployment', icon: 'users', color: 'sky', desc: 'Manpower attendance, shifts, vendor compliance details' },
-        { id: 'energy', title: 'Energy & Utility Consumption', icon: 'zap', color: 'amber', desc: 'Daily electrical kWh meter readings, sustainability tracking' }
-      ];
-
-      trackerMetaConfig.forEach(cfg => {
-        const trData = trackers[cfg.id];
-        const rowsCount = trData ? (trData.record_count || 0) : 0;
-        const sheetsCount = trData && trData.data && trData.data.sheets ? Object.keys(trData.data.sheets).length : 1;
-
-        const card = document.createElement('div');
-        card.className = 'glass-card rounded-2xl p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between space-y-3 group cursor-pointer';
-        card.onclick = () => switchTrackerView(cfg.id);
-
-        card.innerHTML = `
-          <div>
-            <div class="flex items-center justify-between">
-              <div class="p-2.5 rounded-xl bg-${cfg.color}-100 dark:bg-${cfg.color}-950 text-${cfg.color}-600">
-                <i data-lucide="${cfg.icon}" class="w-5 h-5"></i>
-              </div>
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                ${sheetsCount} Sheet${sheetsCount > 1 ? 's' : ''}
-              </span>
-            </div>
-            <h4 class="font-bold text-sm text-slate-900 dark:text-white mt-2 group-hover:text-emerald-600 transition">${cfg.title}</h4>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed">${cfg.desc}</p>
-          </div>
-
-          <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-            <span class="font-extrabold text-slate-900 dark:text-white">${rowsCount.toLocaleString()} <span class="font-normal text-slate-500 text-[11px]">Records</span></span>
-            <span class="flex items-center space-x-1 font-bold text-emerald-600 text-xs">
-              <span>Open Sheet</span>
-              <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
-            </span>
-          </div>
-        `;
-
-        container.appendChild(card);
-      });
-    }
-
-    function renderOverviewCharts() {
-      // 1. Breakdown Categories Chart
-      const bdTr = APP_DATA.trackers?.breakdown;
-      if (bdTr && bdTr.data) {
-        const catMap = {};
-        const rows = bdTr.data.sheets?.live_2026?.rows || bdTr.data.sheets?.master?.rows || [];
-        rows.forEach(r => {
-          const cat = r['Category'] || r['Equipment / Asset'] || 'General';
-          catMap[cat] = (catMap[cat] || 0) + 1;
-        });
-
-        const sortedCats = Object.entries(catMap).sort((a,b) => b[1] - a[1]).slice(0, 7);
-        const ctxBd = document.getElementById('chart-breakdown-cats')?.getContext('2d');
-        if (ctxBd) {
-          if (CHARTS['bd']) CHARTS['bd'].destroy();
-          CHARTS['bd'] = new Chart(ctxBd, {
-            type: 'bar',
-            data: {
-              labels: sortedCats.map(c => c[0]),
-              datasets: [{
-                label: 'Incidents',
-                data: sortedCats.map(c => c[1]),
-                backgroundColor: '#16a34a',
-                borderRadius: 6
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: { legend: { display: false } },
-              scales: { y: { beginAtZero: true, grid: { color: 'rgba(148, 163, 184, 0.1)' } }, x: { grid: { display: false } } }
-            }
-          });
-        }
-      }
-
-      // 2. Staff Contractors Chart
-      const stTr = APP_DATA.trackers?.staff;
-      if (stTr && stTr.data) {
-        const agencyMap = {};
-        const srows = stTr.data.sheets?.contractual_staff?.rows || [];
-        srows.forEach(r => {
-          const ag = r['Contractor Name'] || r['Department'] || 'General';
-          agencyMap[ag] = (agencyMap[ag] || 0) + 1;
-        });
-
-        const sortedAgencies = Object.entries(agencyMap).sort((a,b) => b[1] - a[1]).slice(0, 6);
-        const ctxSt = document.getElementById('chart-staff-contractor')?.getContext('2d');
-        if (ctxSt) {
-          if (CHARTS['st']) CHARTS['st'].destroy();
-          CHARTS['st'] = new Chart(ctxSt, {
-            type: 'doughnut',
-            data: {
-              labels: sortedAgencies.map(a => a[0]),
-              datasets: [{
-                data: sortedAgencies.map(a => a[1]),
-                backgroundColor: ['#0284c7', '#16a34a', '#d97706', '#9333ea', '#e11d48', '#64748b']
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } }
-            }
-          });
-        }
-      }
-    }
-
-    // 3. View Switcher
-    function switchTrackerView(trackerId) {
-      ACTIVE_TRACKER_ID = trackerId;
-      CURRENT_PAGE = 1;
-      SEARCH_QUERY = '';
-      PENDING_EDITS = {};
-      updatePendingEditsBadge();
-
-      // Highlight Nav Pills
-      document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.remove('active');
-        btn.classList.add('text-slate-600', 'dark:text-slate-300');
-      });
-      const activeBtn = document.getElementById(`tab-nav-${trackerId}`);
-      if (activeBtn) {
-        activeBtn.classList.add('active');
-        activeBtn.classList.remove('text-slate-600', 'dark:text-slate-300');
-      }
-
-      if (trackerId === 'overview') {
-        document.getElementById('view-overview').classList.remove('hidden');
-        document.getElementById('view-tracker-detail').classList.add('hidden');
-        renderApp();
-      } else {
-        document.getElementById('view-overview').classList.add('hidden');
-        document.getElementById('view-tracker-detail').classList.remove('hidden');
-        renderTrackerWorksheet(trackerId);
-      }
-
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-
-    // 4. Render Tracker Detail & Grid
-    function renderTrackerWorksheet(trackerId) {
-      const trData = APP_DATA?.trackers?.[trackerId];
-      if (!trData || !trData.data) return;
-
-      const sheets = trData.data.sheets || {};
-      const sheetKeys = Object.keys(sheets);
-      
-      if (!sheetKeys.includes(ACTIVE_SHEET_NAME)) {
-        ACTIVE_SHEET_NAME = sheetKeys[0] || '';
-      }
-
-      // Update Header
-      const titleEl = document.getElementById('tdetail-title');
-      const catEl = document.getElementById('tdetail-category-badge');
-      const subEl = document.getElementById('tdetail-subtitle');
-      if (titleEl) titleEl.innerText = trData.meta?.title || trackerId.toUpperCase();
-      if (catEl) catEl.innerText = trData.meta?.category || 'Operations';
-      if (subEl) subEl.innerText = `${(trData.record_count || 0).toLocaleString()} Total Records Tracked • Live Cloud Synchronized`;
-
-      // Render Sheet Tabs
-      const tabsContainer = document.getElementById('tdetail-sheet-tabs');
-      tabsContainer.innerHTML = '';
-      sheetKeys.forEach(sname => {
-        const isActive = (sname === ACTIVE_SHEET_NAME);
-        const rowCount = sheets[sname]?.rows?.length || 0;
-        const btn = document.createElement('button');
-        btn.className = isActive
-          ? 'px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 text-white shadow-sm cursor-pointer whitespace-nowrap'
-          : 'px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition cursor-pointer whitespace-nowrap';
-        btn.innerHTML = `<span>${sname}</span> <span class="ml-1 opacity-70 text-[10px]">(${rowCount})</span>`;
-        btn.onclick = () => {
-          ACTIVE_SHEET_NAME = sname;
-          CURRENT_PAGE = 1;
-          renderTrackerWorksheet(trackerId);
-        };
-        tabsContainer.appendChild(btn);
-      });
-
-      renderTableGrid();
-    }
-
-    function renderTableGrid() {
-      const trData = APP_DATA?.trackers?.[ACTIVE_TRACKER_ID];
-      if (!trData || !trData.data) return;
-
-      const sheetData = trData.data.sheets?.[ACTIVE_SHEET_NAME];
-      const thead = document.getElementById('tdetail-thead');
-      const tbody = document.getElementById('tdetail-tbody');
-      if (!thead || !tbody) return;
+      const sheetData = curTracker.data.sheets?.[ACTIVE_SHEET_KEY];
+      const theadLetters = document.getElementById('excel-thead-letters');
+      const theadData = document.getElementById('excel-thead-data');
+      const tbody = document.getElementById('excel-tbody-rows');
+      if (!theadLetters || !theadData || !tbody) return;
 
       if (!sheetData || !sheetData.headers) {
-        thead.innerHTML = '';
-        tbody.innerHTML = `<tr><td class="text-center py-12 text-slate-400">No sheet records found.</td></tr>`;
+        theadLetters.innerHTML = '';
+        theadData.innerHTML = '';
+        tbody.innerHTML = `<tr><td class="text-center py-16 text-slate-400 font-semibold">No sheet records found.</td></tr>`;
         return;
       }
 
       const headers = sheetData.headers;
       let rows = sheetData.rows || [];
 
-      // Filter rows by search
-      if (SEARCH_QUERY) {
-        const q = SEARCH_QUERY.toLowerCase();
+      // Filter rows if search active
+      if (SHEET_SEARCH_TERM) {
+        const q = SHEET_SEARCH_TERM.toLowerCase();
         rows = rows.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(q)));
       }
 
-      // Pagination
-      const total = rows.length;
-      const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
-      if (CURRENT_PAGE > totalPages) CURRENT_PAGE = totalPages;
-      if (CURRENT_PAGE < 1) CURRENT_PAGE = 1;
+      // Update Status Bar Record Count
+      document.getElementById('status-record-count').innerText = `${rows.length.toLocaleString()} Records (${headers.length} Columns)`;
 
-      const start = (CURRENT_PAGE - 1) * PAGE_SIZE;
-      const end = Math.min(start + PAGE_SIZE, total);
-      const pageRows = rows.slice(start, end);
+      // 1. Render Excel Column Letters Header (A, B, C, D, ...)
+      let lettersHtml = `<tr><th class="excel-header-row"></th>`;
+      headers.forEach((h, colIdx) => {
+        const letter = getExcelColLetter(colIdx);
+        lettersHtml += `<th class="excel-header-col px-3 py-1">${letter}</th>`;
+      });
+      lettersHtml += `</tr>`;
+      theadLetters.innerHTML = lettersHtml;
 
-      document.getElementById('tdetail-page-start').innerText = total > 0 ? start + 1 : 0;
-      document.getElementById('tdetail-page-end').innerText = end;
-      document.getElementById('tdetail-page-total').innerText = total.toLocaleString();
-      document.getElementById('tdetail-page-current').innerText = CURRENT_PAGE;
-      document.getElementById('btn-tdetail-prev').disabled = (CURRENT_PAGE <= 1);
-      document.getElementById('btn-tdetail-next').disabled = (CURRENT_PAGE >= totalPages);
+      // 2. Render Data Column Headers (Sr. No., Start Date, Location, ...)
+      let dataHeadersHtml = `<tr><th class="excel-header-row bg-[#edebe9]"></th>`;
+      headers.forEach(h => {
+        dataHeadersHtml += `<th class="excel-th-data">${h}</th>`;
+      });
+      dataHeadersHtml += `</tr>`;
+      theadData.innerHTML = dataHeadersHtml;
 
-      // Render Headers
-      thead.innerHTML = `<tr>
-        <th class="px-3 py-2.5 w-12 text-center text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-700">#</th>
-        ${headers.map(h => `
-          <th class="px-3 py-2.5 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">${h}</th>
-        `).join('')}
-        <th class="px-3 py-2.5 text-right w-16 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-700">Action</th>
-      </tr>`;
-
-      if (pageRows.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="${headers.length + 2}" class="text-center py-10 text-slate-400">No matching records found.</td></tr>`;
+      // 3. Render Data Rows with Row Numbers (1, 2, 3, ...)
+      if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${headers.length + 1}" class="text-center py-12 text-slate-400 font-medium">No matching records found in this sheet.</td></tr>`;
         return;
       }
 
       tbody.innerHTML = '';
-      pageRows.forEach((r, idx) => {
-        const realIdx = start + idx;
+      rows.forEach((row, rowIdx) => {
         const tr = document.createElement('tr');
-        tr.className = 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition group';
+        
+        // Row Number Column (1, 2, 3, ...)
+        let rowHtml = `<td class="excel-header-row py-1">${rowIdx + 1}</td>`;
 
-        let cellsHtml = `<td class="px-3 py-2 text-center text-slate-400 font-mono text-[11px] select-none">${realIdx + 1}</td>`;
+        // Data Cells
+        headers.forEach((h, colIdx) => {
+          const val = (row[h] !== undefined && row[h] !== null) ? row[h] : '';
+          const isEdited = PENDING_EDITS[rowIdx] && PENDING_EDITS[rowIdx][h] !== undefined;
+          const colLetter = getExcelColLetter(colIdx);
+          const cellCoord = `${colLetter}${rowIdx + 1}`;
 
-        headers.forEach(h => {
-          const val = r[h] !== undefined && r[h] !== null ? r[h] : '';
-          const isEdited = PENDING_EDITS[realIdx] && PENDING_EDITS[realIdx][h] !== undefined;
-          
-          let formattedVal = val;
-          // Format status badges
-          if (String(h).toLowerCase().includes('status')) {
-            const sVal = String(val).toLowerCase();
-            if (sVal.includes('close') || sVal.includes('confirm') || sVal.includes('active')) {
-              formattedVal = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">${val}</span>`;
-            } else if (sVal.includes('wip') || sVal.includes('pending') || sVal.includes('hold')) {
-              formattedVal = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">${val}</span>`;
-            } else if (sVal.includes('missing') || sVal.includes('cancel') || sVal.includes('breakdown')) {
-              formattedVal = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">${val}</span>`;
-            }
-          }
-
-          cellsHtml += `
-            <td class="px-3 py-2 border-r border-slate-100 dark:border-slate-800/60 ${isEdited ? 'bg-emerald-50 dark:bg-emerald-950/60 font-semibold text-emerald-800 dark:text-emerald-200 ring-1 ring-emerald-500' : ''}">
-              <div contenteditable="true" 
-                class="outline-none focus:bg-white focus:dark:bg-slate-700 px-1 py-0.5 rounded focus:ring-1 focus:ring-emerald-500 transition min-w-[60px]"
-                onblur="handleCellEdit(${realIdx}, '${h.replace(/'/g, "\'")}', this.innerText.trim(), this)">${val}</div>
-            </td>
+          rowHtml += `
+            <td class="excel-cell ${isEdited ? 'excel-cell-edited' : ''}" 
+                contenteditable="true" 
+                data-row="${rowIdx}" 
+                data-col="${h.replace(/"/g, '&quot;')}"
+                data-coord="${cellCoord}"
+                onfocus="handleCellFocus(${rowIdx}, '${h.replace(/'/g, "\'")}', '${cellCoord}', this)"
+                onblur="handleCellBlur(${rowIdx}, '${h.replace(/'/g, "\'")}', this.innerText.trim(), this)"
+                onkeydown="handleCellKeyDown(event, ${rowIdx}, ${colIdx})">${val}</td>
           `;
         });
 
-        cellsHtml += `
-          <td class="px-3 py-2 text-right">
-            <button onclick="deleteTableRow(${realIdx})" title="Delete row"
-              class="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 transition cursor-pointer">
-              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-            </button>
-          </td>
-        `;
-
-        tr.innerHTML = cellsHtml;
+        tr.innerHTML = rowHtml;
         tbody.appendChild(tr);
       });
-
-      lucide.createIcons();
     }
 
-    // 5. In-Line Cell Editing & Cloud Push
-    function handleCellEdit(rowIdx, colName, newVal, cellEl) {
-      const trData = APP_DATA?.trackers?.[ACTIVE_TRACKER_ID];
-      const sheetData = trData?.data?.sheets?.[ACTIVE_SHEET_NAME];
+    // 5. In-Cell Interaction, Focus & Blur Handlers
+    function handleCellFocus(rowIdx, colName, cellCoord, cellEl) {
+      SELECTED_ROW_IDX = rowIdx;
+      SELECTED_COL_NAME = colName;
+      
+      // Update Name Box and Formula Bar
+      document.getElementById('excel-name-box').innerText = cellCoord;
+      document.getElementById('excel-formula-bar').value = cellEl.innerText;
+      document.getElementById('status-selection-info').innerText = `Selected: ${cellCoord} (${colName})`;
+    }
+
+    function handleCellBlur(rowIdx, colName, newVal, cellEl) {
+      const curTracker = APP_DATA?.trackers?.[ACTIVE_WORKBOOK_ID];
+      const sheetData = curTracker?.data?.sheets?.[ACTIVE_SHEET_KEY];
       if (!sheetData || !sheetData.rows) return;
 
       const origVal = sheetData.rows[rowIdx]?.[colName] || '';
-      if (origVal === newVal) return;
+      if (String(origVal) === String(newVal)) return;
 
       sheetData.rows[rowIdx][colName] = newVal;
       if (!PENDING_EDITS[rowIdx]) PENDING_EDITS[rowIdx] = {};
       PENDING_EDITS[rowIdx][colName] = newVal;
 
-      cellEl.parentElement.classList.add('bg-emerald-50', 'dark:bg-emerald-950/60', 'font-semibold', 'text-emerald-800', 'dark:text-emerald-200', 'ring-1', 'ring-emerald-500');
-      updatePendingEditsBadge();
+      cellEl.classList.add('excel-cell-edited');
+      updatePendingEditsUI();
     }
 
-    function deleteTableRow(rowIdx) {
-      if (!confirm('Are you sure you want to delete this record?')) return;
-      const trData = APP_DATA?.trackers?.[ACTIVE_TRACKER_ID];
-      const sheetData = trData?.data?.sheets?.[ACTIVE_SHEET_NAME];
-      if (!sheetData || !sheetData.rows) return;
+    function handleFormulaBarInput(val) {
+      const activeCell = document.querySelector(`.excel-cell:focus`);
+      if (activeCell) {
+        activeCell.innerText = val;
+      }
+    }
 
-      sheetData.rows.splice(rowIdx, 1);
+    function handleFormulaBarKeyDown(e) {
+      if (e.key === 'Enter') {
+        const curTracker = APP_DATA?.trackers?.[ACTIVE_WORKBOOK_ID];
+        const sheetData = curTracker?.data?.sheets?.[ACTIVE_SHEET_KEY];
+        if (sheetData && sheetData.rows && sheetData.rows[SELECTED_ROW_IDX]) {
+          const newVal = document.getElementById('excel-formula-bar').value;
+          sheetData.rows[SELECTED_ROW_IDX][SELECTED_COL_NAME] = newVal;
+          if (!PENDING_EDITS[SELECTED_ROW_IDX]) PENDING_EDITS[SELECTED_ROW_IDX] = {};
+          PENDING_EDITS[SELECTED_ROW_IDX][SELECTED_COL_NAME] = newVal;
+          updatePendingEditsUI();
+          renderSpreadsheetGrid();
+          showToast(`✓ Updated cell in ${SELECTED_COL_NAME}`);
+        }
+      }
+    }
+
+    function handleCellKeyDown(e, rowIdx, colIdx) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        // Move to cell below
+        const nextCell = document.querySelector(`td.excel-cell[data-row="${rowIdx + 1}"]`);
+        if (nextCell) nextCell.focus();
+      }
+    }
+
+    // 6. Insert New Row Directly into Sheet
+    function insertNewRowToCurrentSheet() {
+      const curTracker = APP_DATA?.trackers?.[ACTIVE_WORKBOOK_ID];
+      const sheetData = curTracker?.data?.sheets?.[ACTIVE_SHEET_KEY];
+      if (!sheetData || !sheetData.headers) return;
+
+      const newRow = {};
+      sheetData.headers.forEach((h, idx) => {
+        if (h === 'Sr. No.' || h === 'Sr.No' || h === '#') newRow[h] = (sheetData.rows.length + 1);
+        else newRow[h] = '';
+      });
+
+      sheetData.rows.unshift(newRow);
       sheetData.row_count = sheetData.rows.length;
-      PENDING_EDITS['deleted_' + rowIdx] = true;
-      updatePendingEditsBadge();
-      renderTableGrid();
-      showToast('🗑️ Record deleted. Click "Push Changes Live" to sync.');
+      curTracker.record_count = (curTracker.record_count || 0) + 1;
+
+      if (!PENDING_EDITS[0]) PENDING_EDITS[0] = {};
+      sheetData.headers.forEach(h => PENDING_EDITS[0][h] = newRow[h]);
+
+      updatePendingEditsUI();
+      renderSpreadsheetGrid();
+      showToast('➕ Inserted new row. Click any cell to fill and click "Push Changes Live".');
     }
 
-    function updatePendingEditsBadge() {
+    // 7. Update Pending Edits Indicator & Push to Cloud
+    function updatePendingEditsUI() {
       const count = Object.keys(PENDING_EDITS).length;
-      const btn = document.getElementById('btn-push-sheet-edits');
-      const badge = document.getElementById('tdetail-unsaved-badge');
+      const btn = document.getElementById('btn-push-live');
+      const badge = document.getElementById('status-unsaved-badge');
       if (btn) btn.disabled = (count === 0);
       if (badge) {
         if (count > 0) {
@@ -1001,13 +712,13 @@
       }
     }
 
-    async function pushCurrentSheetEditsLive() {
-      const tid = ACTIVE_TRACKER_ID;
+    async function pushChangesLiveToFirebase() {
+      const tid = ACTIVE_WORKBOOK_ID;
       const trackerObj = APP_DATA?.trackers?.[tid];
       if (!trackerObj) return;
 
-      const btn = document.getElementById('btn-push-sheet-edits');
-      const label = document.getElementById('btn-push-sheet-label');
+      const btn = document.getElementById('btn-push-live');
+      const label = document.getElementById('btn-push-live-text');
       btn.disabled = true;
       label.innerText = 'Syncing Live...';
 
@@ -1022,101 +733,24 @@
         }
 
         PENDING_EDITS = {};
-        updatePendingEditsBadge();
-        renderApp();
-        showToast(`🚀 Successfully pushed live updates for ${trackerObj.meta?.title || tid} to all devices!`);
+        updatePendingEditsUI();
+        renderSpreadsheetView();
+        showToast(`🚀 Pushed all live updates for ${trackerObj.meta?.title || tid} to cloud!`);
       } catch (err) {
         console.error('Push error:', err);
-        showToast('Saved locally. Cloud error: ' + err.message);
+        showToast('Saved in memory. Cloud error: ' + err.message);
       } finally {
         label.innerText = 'Push Changes Live';
       }
     }
 
-    function handleTableSearch() {
-      SEARCH_QUERY = document.getElementById('tdetail-search').value.trim();
-      CURRENT_PAGE = 1;
-      renderTableGrid();
+    function handleSheetSearch(query) {
+      SHEET_SEARCH_TERM = query.trim();
+      renderSpreadsheetGrid();
     }
 
-    function handlePageSizeChange(val) {
-      PAGE_SIZE = parseInt(val, 10) || 25;
-      CURRENT_PAGE = 1;
-      renderTableGrid();
-    }
-
-    function changeTablePage(delta) {
-      CURRENT_PAGE += delta;
-      renderTableGrid();
-    }
-
-    // 6. Dynamic Add Record Modal
-    function openAddRecordModal() {
-      const tid = ACTIVE_TRACKER_ID === 'overview' ? 'breakdown' : ACTIVE_TRACKER_ID;
-      const trData = APP_DATA?.trackers?.[tid];
-      const sheetData = trData?.data?.sheets?.[ACTIVE_SHEET_NAME] || Object.values(trData?.data?.sheets || {})[0];
-      if (!sheetData) return;
-
-      document.getElementById('modal-add-title').innerText = `Add Record to ${trData.meta?.short_title || trData.meta?.title || tid}`;
-      document.getElementById('modal-add-subtitle').innerText = `Sheet: ${sheetData.sheet_name || 'Primary Sheet'}`;
-
-      const container = document.getElementById('form-fields-container');
-      container.innerHTML = '';
-
-      sheetData.headers.forEach(h => {
-        if (h === 'Sr. No.' || h === '#') return;
-        const field = document.createElement('div');
-        field.className = 'space-y-1';
-        field.innerHTML = `
-          <label class="block font-semibold text-slate-700 dark:text-slate-300 text-xs">${h}</label>
-          <input type="text" name="${h}" placeholder="Enter ${h}..."
-            class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs">
-        `;
-        container.appendChild(field);
-      });
-
-      document.getElementById('modal-add-record').classList.remove('hidden');
-    }
-
-    function closeAddRecordModal() {
-      document.getElementById('modal-add-record').classList.add('hidden');
-    }
-
-    async function handleRecordFormSubmit(e) {
-      e.preventDefault();
-      const tid = ACTIVE_TRACKER_ID === 'overview' ? 'breakdown' : ACTIVE_TRACKER_ID;
-      const trData = APP_DATA?.trackers?.[tid];
-      const sheetData = trData?.data?.sheets?.[ACTIVE_SHEET_NAME] || Object.values(trData?.data?.sheets || {})[0];
-      if (!sheetData) return;
-
-      const formData = new FormData(e.target);
-      const newRow = {};
-      sheetData.headers.forEach(h => {
-        if (h === 'Sr. No.' || h === '#') newRow[h] = (sheetData.rows.length + 1);
-        else newRow[h] = formData.get(h) || '';
-      });
-
-      sheetData.rows.unshift(newRow);
-      sheetData.row_count = sheetData.rows.length;
-      trData.record_count = (trData.record_count || 0) + 1;
-
-      closeAddRecordModal();
-      e.target.reset();
-
-      try {
-        if (FIREBASE_DB && IS_CONNECTED) {
-          await FIREBASE_DB.collection('facility_trackers').doc(`tracker_${tid}`).set(trData);
-        }
-        renderApp();
-        showToast(`✓ Added new record to ${trData.meta?.title || tid} and synced live!`);
-      } catch (err) {
-        renderApp();
-        showToast('✓ Record added in memory!');
-      }
-    }
-
-    // 7. Universal Excel Export Engine (Binary Blob)
-    function downloadWorkbookBlob(wb, filename) {
+    // 8. Download Excel Engine (Binary Blob for All Browsers)
+    function downloadBlobFile(wb, filename) {
       try {
         const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
         const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -1130,19 +764,17 @@
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
         }, 800);
-        showToast(`📥 Downloaded "${filename}" successfully!`);
+        showToast(`📥 Downloaded "${filename}"!`);
       } catch (e) {
-        console.warn('Fallback download:', e);
         XLSX.writeFile(wb, filename);
         showToast(`📥 Downloaded "${filename}"!`);
       }
     }
 
-    function downloadActiveTrackerExcel() {
-      const tid = ACTIVE_TRACKER_ID === 'overview' ? 'breakdown' : ACTIVE_TRACKER_ID;
-      const trData = APP_DATA?.trackers?.[tid];
+    function downloadCurrentExcelWorkbook() {
+      const trData = APP_DATA?.trackers?.[ACTIVE_WORKBOOK_ID];
       if (!trData || !trData.data || !trData.data.sheets) {
-        downloadMasterWorkbook();
+        showToast('No dataset available to download.');
         return;
       }
 
@@ -1156,7 +788,7 @@
           const rows = s.rows || [];
           if (rows.length > 0) {
             const ws = XLSX.utils.json_to_sheet(rows, { header: s.headers });
-            const cleanName = sname.slice(0, 31).replace(/[:\\/?*\[\]]/g, '_');
+            const cleanName = (s.sheet_name || sname).slice(0, 31).replace(/[:\\/?*\[\]]/g, '_');
             XLSX.utils.book_append_sheet(wb, ws, cleanName);
             count++;
           }
@@ -1167,19 +799,16 @@
           return;
         }
 
-        const safeTitle = (trData.meta?.short_title || trData.meta?.title || tid).replace(/[^a-zA-Z0-9_\- ]/g, '').replace(/\s+/g, '_');
+        const safeTitle = (trData.meta?.short_title || trData.meta?.title || ACTIVE_WORKBOOK_ID).replace(/[^a-zA-Z0-9_\- ]/g, '').replace(/\s+/g, '_');
         const filename = `${safeTitle}_${new Date().toISOString().slice(0,10)}.xlsx`;
-        downloadWorkbookBlob(wb, filename);
+        downloadBlobFile(wb, filename);
       } catch (err) {
         alert('Export error: ' + err.message);
       }
     }
 
-    function downloadMasterWorkbook() {
-      if (!APP_DATA || !APP_DATA.trackers) {
-        showToast('No tracker data available to export.');
-        return;
-      }
+    function downloadMasterConsolidatedWorkbook() {
+      if (!APP_DATA || !APP_DATA.trackers) return;
 
       try {
         const wb = XLSX.utils.book_new();
@@ -1188,13 +817,13 @@
         for (let tid in APP_DATA.trackers) {
           const tr = APP_DATA.trackers[tid];
           const sheets = tr.data?.sheets || {};
-          const title = tr.meta?.short_title || tr.meta?.title || tid;
+          const trTitle = tr.meta?.short_title || tr.meta?.title || tid;
 
           for (let sname in sheets) {
             const s = sheets[sname];
             const rows = s.rows || [];
             if (rows.length > 0) {
-              const tabName = `${title}_${sname}`.slice(0, 31).replace(/[:\\/?*\[\]]/g, '_');
+              const tabName = `${trTitle}_${s.sheet_name || sname}`.slice(0, 31).replace(/[:\\/?*\[\]]/g, '_');
               const ws = XLSX.utils.json_to_sheet(rows, { header: s.headers });
               XLSX.utils.book_append_sheet(wb, ws, tabName);
               total++;
@@ -1202,64 +831,20 @@
           }
         }
 
-        if (total === 0) {
-          showToast('No data available in trackers.');
-          return;
-        }
-
-        const filename = `Facility_Multi_Trackers_Master_${new Date().toISOString().slice(0,10)}.xlsx`;
-        downloadWorkbookBlob(wb, filename);
+        const filename = `Facility_Master_Consolidated_Trackers_${new Date().toISOString().slice(0,10)}.xlsx`;
+        downloadBlobFile(wb, filename);
       } catch (err) {
         alert('Master export error: ' + err.message);
       }
     }
 
-    // 8. Excel Upload & Sync Engine
-    let PENDING_UPLOAD_DATA = null;
-
-    function openUploadModal() {
-      document.getElementById('modal-upload').classList.remove('hidden');
-    }
-
-    function closeUploadModal() {
-      document.getElementById('modal-upload').classList.add('hidden');
-      PENDING_UPLOAD_DATA = null;
-      document.getElementById('upload-preview').classList.add('hidden');
-      document.getElementById('btn-confirm-upload').disabled = true;
-    }
-
-    function handleDragOver(e) {
-      e.preventDefault();
-      document.getElementById('drop-zone').classList.add('border-sky-500', 'bg-sky-100/50');
-    }
-
-    function handleDragLeave(e) {
-      e.preventDefault();
-      document.getElementById('drop-zone').classList.remove('border-sky-500', 'bg-sky-100/50');
-    }
-
-    function handleFileDrop(e) {
-      e.preventDefault();
-      document.getElementById('drop-zone').classList.remove('border-sky-500', 'bg-sky-100/50');
-      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        parseUploadedFile(e.dataTransfer.files[0]);
-      }
-    }
-
-    function handleFileSelect(e) {
-      if (e.target.files && e.target.files.length > 0) {
-        parseUploadedFile(e.target.files[0]);
-      }
-    }
-
-    function parseUploadedFile(file) {
+    // 9. Upload & Parse Excel File
+    function handleExcelFileUpload(event) {
+      const file = event.target.files?.[0];
       if (!file) return;
-      const statusEl = document.getElementById('upload-status');
-      statusEl.classList.remove('hidden');
-      statusEl.innerText = 'Parsing Excel spreadsheet...';
 
       const reader = new FileReader();
-      reader.onload = function(e) {
+      reader.onload = async function(e) {
         try {
           const data = new Uint8Array(e.target.result);
           const workbook = XLSX.read(data, { type: 'array' });
@@ -1307,7 +892,7 @@
             }
           });
 
-          // Match tracker by filename
+          // Match tracker ID
           const fname = file.name.toLowerCase();
           let matchedTid = 'breakdown';
           if (fname.includes('lock') || fname.includes('key')) matchedTid = 'locker';
@@ -1317,18 +902,22 @@
           else if (fname.includes('energy') || fname.includes('power')) matchedTid = 'energy';
           else matchedTid = fname.replace(/[^a-z0-9]/g, '_').slice(0, 15);
 
-          PENDING_UPLOAD_DATA = {
-            tid: matchedTid,
-            filename: file.name,
-            sheets: sheetsData,
-            totalRows: totalRows
-          };
+          if (!APP_DATA.trackers[matchedTid]) {
+            APP_DATA.trackers[matchedTid] = {
+              meta: { id: matchedTid, title: file.name.replace(/\.[^/.]+$/, ''), filename: file.name },
+              data: { sheets: {} }
+            };
+          }
 
-          document.getElementById('upload-preview').classList.remove('hidden');
-          document.getElementById('upload-file-name').innerText = file.name;
-          document.getElementById('upload-file-stats').innerText = `${Object.keys(sheetsData).length} sheets | ${totalRows.toLocaleString()} rows detected`;
-          document.getElementById('btn-confirm-upload').disabled = false;
-          statusEl.innerText = 'Ready to broadcast live!';
+          APP_DATA.trackers[matchedTid].data.sheets = sheetsData;
+          APP_DATA.trackers[matchedTid].record_count = totalRows;
+
+          if (FIREBASE_DB && IS_CONNECTED) {
+            await FIREBASE_DB.collection('facility_trackers').doc(`tracker_${matchedTid}`).set(APP_DATA.trackers[matchedTid]);
+          }
+
+          switchWorkbook(matchedTid);
+          showToast(`✓ Broadcasted updated "${file.name}" to all users!`);
         } catch (err) {
           alert('Error parsing Excel: ' + err.message);
         }
@@ -1336,49 +925,36 @@
       reader.readAsArrayBuffer(file);
     }
 
-    async function processAndSyncExcel() {
-      if (!PENDING_UPLOAD_DATA) return;
-      const { tid, filename, sheets, totalRows } = PENDING_UPLOAD_DATA;
-      const btn = document.getElementById('btn-confirm-upload');
-      btn.disabled = true;
-      btn.innerText = 'Syncing to Cloud...';
+    function createNewSheetInCurrentTracker() {
+      const name = prompt('Enter new sheet name:');
+      if (!name) return;
 
-      if (!APP_DATA.trackers[tid]) {
-        APP_DATA.trackers[tid] = {
-          meta: { id: tid, title: filename.replace(/\.[^/.]+$/, ''), category: 'Custom Trackers' },
-          data: { sheets: {} }
-        };
-      }
+      const curTracker = APP_DATA?.trackers?.[ACTIVE_WORKBOOK_ID];
+      if (!curTracker || !curTracker.data) return;
 
-      APP_DATA.trackers[tid].data.sheets = sheets;
-      APP_DATA.trackers[tid].record_count = totalRows;
+      if (!curTracker.data.sheets) curTracker.data.sheets = {};
+      const baseSheet = Object.values(curTracker.data.sheets)[0];
+      const headers = baseSheet ? baseSheet.headers : ['Sr. No.', 'Title', 'Date', 'Status', 'Remarks'];
 
-      try {
-        if (FIREBASE_DB && IS_CONNECTED) {
-          await FIREBASE_DB.collection('facility_trackers').doc(`tracker_${tid}`).set(APP_DATA.trackers[tid]);
-          await FIREBASE_DB.collection('facility_trackers').doc('live_snapshot').set({
-            timestamp: new Date().toISOString(),
-            executive_kpis: APP_DATA.executive_kpis || {},
-            trackers_list: Object.keys(APP_DATA.trackers)
-          });
-        }
-        closeUploadModal();
-        renderApp();
-        showToast(`✓ Broadcasted "${filename}" (${totalRows.toLocaleString()} rows) to all devices!`);
-      } catch (err) {
-        closeUploadModal();
-        renderApp();
-        showToast(`✓ Updated in memory!`);
-      }
+      curTracker.data.sheets[name] = {
+        sheet_name: name,
+        headers: headers,
+        rows: [],
+        row_count: 0
+      };
+
+      ACTIVE_SHEET_KEY = name;
+      renderSpreadsheetView();
+      showToast(`➕ Added new sheet "${name}".`);
     }
 
-    // 9. Toast Notifications
+    // 10. Toast Notification
     function showToast(msg) {
       const container = document.getElementById('toast-container');
       if (!container) return;
       const toast = document.createElement('div');
-      toast.className = 'glass-card px-4 py-2.5 rounded-2xl shadow-xl border border-emerald-500/40 text-xs font-bold text-slate-900 dark:text-white flex items-center space-x-2 transition-all transform duration-200 pointer-events-auto';
-      toast.innerHTML = `<i data-lucide="check-circle" class="w-4 h-4 text-emerald-600"></i><span>${msg}</span>`;
+      toast.className = 'bg-[#323130] text-white px-4 py-2 rounded shadow-2xl text-xs font-semibold flex items-center space-x-2 border-l-4 border-[#107c41] transition-all transform duration-200 pointer-events-auto';
+      toast.innerHTML = `<i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i><span>${msg}</span>`;
       container.appendChild(toast);
       lucide.createIcons();
       setTimeout(() => {
@@ -1388,31 +964,13 @@
       }, 3500);
     }
 
-    // 10. Theme Management
-    function toggleTheme() {
-      document.documentElement.classList.toggle('dark');
-      const isDark = document.documentElement.classList.contains('dark');
-      localStorage.setItem('theme', isDark ? 'dark' : 'light');
-      const icon = document.getElementById('theme-icon');
-      if (icon) {
-        icon.setAttribute('data-lucide', isDark ? 'sun' : 'moon');
-        lucide.createIcons();
-      }
-    }
-
-    // Initialize on Load
+    // Initialize App
     window.addEventListener('DOMContentLoaded', () => {
-      const savedTheme = localStorage.getItem('theme');
-      if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-        document.documentElement.classList.add('dark');
-      }
-
       if (window.EMBEDDED_TRACKER_DATA) {
         APP_DATA = window.EMBEDDED_TRACKER_DATA;
-        renderApp();
+        renderSpreadsheetView();
       }
-
-      initFirebaseBackend();
+      initFirebaseCloud();
     });
   </script>
 </body>
