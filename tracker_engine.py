@@ -3,8 +3,12 @@ import io
 import json
 import hashlib
 import datetime
+import warnings
 from typing import Dict, Any, List, Optional
 import openpyxl
+
+# Suppress harmless openpyxl data validation warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
 def serialize_val(val: Any) -> Any:
     """Safely convert Excel cell values (datetime, date, time, etc.) to JSON serializable formats."""

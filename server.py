@@ -5,7 +5,12 @@ import json
 import time
 import socket
 import urllib.parse
+import warnings
 from http.server import HTTPServer, BaseHTTPRequestHandler
+
+# Suppress harmless openpyxl data validation warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
+
 from tracker_engine import TrackerEngine, get_file_meta
 
 PORT = 8080

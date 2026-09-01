@@ -5,6 +5,11 @@ import time
 import argparse
 import urllib.request
 import urllib.error
+import warnings
+
+# Suppress harmless openpyxl data validation warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
+
 from tracker_engine import TrackerEngine, get_file_meta
 
 WORKSPACE_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -159,7 +164,7 @@ def sync_via_firebase_rest(payload: dict, database_url: str, auth_secret: str = 
         print(f"[ERROR] Firebase REST sync failed: {e}")
         return False
 
-def run_watch_loop(interval_sec: int = 4, cred_path: str = "serviceAccountKey.json", db_url: str = None):
+def run_watch_loop(interval_sec: int = 3, cred_path: str = "serviceAccountKey.json", db_url: str = None):
     """Continuously monitor Excel files and auto-sync to Firebase on change."""
     print("=" * 70)
     print("   🔥 Facility Multi-Tracker Firebase Cloud Continuous Sync Daemon")
@@ -178,42 +183,50 @@ def run_watch_loop(interval_sec: int = 4, cred_path: str = "serviceAccountKey.js
     if db_url and "your-project-id" not in db_url:
         print(f"[*] Realtime DB URL: {db_url}")
     print("=" * 70)
-    print("[*] Watching folder for newly dropped or updated Excel files (.xlsx / .xlsm)...")
-    print("[*] When you place any Excel tracker file here, it will auto-sync to Firebase.\n")
+    print("[*] Initializing baseline tracker snapshot...")
+    
+    # Baseline load
+    cached_payload = load_local_payload()
+    if os.path.exists(cred_full_path):
+        sync_via_firebase_admin(cached_payload, cred_full_path)
+    print("\n[*] 🟢 LIVE WATCHER RUNNING. Watching for Excel edits or new files...")
+    print("[*] Keep this window open. When you edit any Excel file and press Ctrl+S,")
+    print("    it will instantly reflect on your Vercel link worldwide in real time!\n")
 
     last_timestamps = {}
+    for tr in ENGINE.scan_all_trackers():
+        p = tr["path"]
+        last_timestamps[p] = os.path.getmtime(p) if os.path.exists(p) else 0
 
     while True:
         try:
             discovered = ENGINE.scan_all_trackers()
-            has_changes = False
-
-            # Check if any new trackers were added or file modified
-            current_paths = {tr["path"] for tr in discovered}
-            if set(last_timestamps.keys()) != current_paths:
-                has_changes = True
+            modified_trackers = []
 
             for tr in discovered:
                 p = tr["path"]
                 mtime = os.path.getmtime(p) if os.path.exists(p) else 0
                 if last_timestamps.get(p) != mtime:
-                    has_changes = True
                     last_timestamps[p] = mtime
+                    modified_trackers.append(tr)
 
-            if has_changes:
-                print(f"\n[{time.strftime('%H:%M:%S')}] Detected modification/addition in Excel trackers! Parsing & syncing...")
-                payload = load_local_payload()
-                rec_count = payload['executive_kpis']['total_records_tracked']
-                tr_count = len(payload['trackers'])
+            if modified_trackers:
+                for tr in modified_trackers:
+                    rel_p = tr.get("relative_path", os.path.basename(tr["path"]))
+                    print(f"\n[{time.strftime('%H:%M:%S')}] ⚡ Detected modification in: {rel_p}")
+                
+                # Re-parse and push
+                cached_payload = load_local_payload()
+                rec_count = cached_payload['executive_kpis']['total_records_tracked']
+                tr_count = len(cached_payload['trackers'])
                 print(f"[{time.strftime('%H:%M:%S')}] Parsed {rec_count:,} records across {tr_count} trackers.")
 
                 if os.path.exists(cred_full_path):
-                    sync_via_firebase_admin(payload, cred_full_path)
+                    sync_via_firebase_admin(cached_payload, cred_full_path)
                 elif db_url and "your-project-id" not in db_url:
-                    sync_via_firebase_rest(payload, db_url)
+                    sync_via_firebase_rest(cached_payload, db_url)
                 else:
-                    print(f"[{time.strftime('%H:%M:%S')}] Local snapshot updated in 'data.js'.")
-                    print("[TIP] To sync live to Firebase Cloud, place 'serviceAccountKey.json' in this folder.")
+                    print(f"[{time.strftime('%H:%M:%S')}] Snapshot updated locally in 'data.js'.")
 
         except KeyboardInterrupt:
             print("\n[*] Firebase sync stopped.")
@@ -228,7 +241,7 @@ if __name__ == "__main__":
     parser.add_argument("--watch", action="store_true", help="Run continuous background sync daemon")
     parser.add_argument("--cred", default="serviceAccountKey.json", help="Path to serviceAccountKey.json")
     parser.add_argument("--db-url", default=None, help="Firebase Realtime Database URL")
-    parser.add_argument("--interval", type=int, default=4, help="Watch interval in seconds")
+    parser.add_argument("--interval", type=int, default=3, help="Watch interval in seconds")
 
     args = parser.parse_args()
 
