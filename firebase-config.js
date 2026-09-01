@@ -1,13 +1,11 @@
 // Firebase Web Client Configuration
-// You can replace the values below with your Firebase project credentials from:
-// Firebase Console -> Project Settings -> General -> Your apps -> SDK setup and configuration
-
 window.FIREBASE_CONFIG = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "your-project-id.firebaseapp.com",
-  projectId: "your-project-id",
-  storageBucket: "your-project-id.appspot.com",
-  messagingSenderId: "1234567890",
-  appId: "1:1234567890:web:abcdef123456",
-  databaseURL: "https://your-project-id-default-rtdb.firebaseio.com"
+  apiKey: "AIzaSyB1Ch0F0HN3KVGNYYoWOFPZlHtATsam-Og",
+  authDomain: "facility-trackers----hub.firebaseapp.com",
+  projectId: "facility-trackers----hub",
+  storageBucket: "facility-trackers----hub.firebasestorage.app",
+  messagingSenderId: "817789260078",
+  appId: "1:817789260078:web:09aff855286fb3b1a96abf",
+  databaseURL: "https://facility-trackers----hub-default-rtdb.firebaseio.com"
 };
+
