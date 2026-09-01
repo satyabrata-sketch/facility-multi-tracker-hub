@@ -1885,9 +1885,9 @@
 
         // Push to Firebase if connected
         if (FIREBASE_DB && IS_FIREBASE_CONNECTED) {
-          await FIREBASE_DB.collection('facility_trackers').document('executive_summary').set(APP_DATA.executive_kpis);
-          await FIREBASE_DB.collection('facility_trackers').document(`tracker_${tid}`).set(trackerObj);
-          await FIREBASE_DB.collection('facility_trackers').document('live_snapshot').set({
+          await FIREBASE_DB.collection('facility_trackers').doc('executive_summary').set(APP_DATA.executive_kpis);
+          await FIREBASE_DB.collection('facility_trackers').doc(`tracker_${tid}`).set(trackerObj);
+          await FIREBASE_DB.collection('facility_trackers').doc('live_snapshot').set({
             timestamp: new Date().toISOString(),
             executive_kpis: APP_DATA.executive_kpis,
             trackers_list: Object.keys(APP_DATA.trackers)
@@ -1931,17 +1931,17 @@
           FIREBASE_DB = firebase.firestore();
           
           // Listen to real-time updates on Firestore collection
-          FIREBASE_DB.collection('facility_trackers').document('live_snapshot')
+          FIREBASE_DB.collection('facility_trackers').doc('live_snapshot')
             .onSnapshot(async (doc) => {
               if (doc.exists) {
                 console.log('[Firebase] Received real-time cloud update from Firestore!');
-                const summaryDoc = await FIREBASE_DB.collection('facility_trackers').document('executive_summary').get();
+                const summaryDoc = await FIREBASE_DB.collection('facility_trackers').doc('executive_summary').get();
                 const snapshotData = doc.data();
                 const trackersList = snapshotData.trackers_list || ['breakdown', 'locker', 'events', 'fnb', 'staff'];
                 
                 const cloudTrackers = {};
                 for (const tid of trackersList) {
-                  const tDoc = await FIREBASE_DB.collection('facility_trackers').document(`tracker_${tid}`).get();
+                  const tDoc = await FIREBASE_DB.collection('facility_trackers').doc(`tracker_${tid}`).get();
                   if (tDoc.exists) {
                     let tdata = tDoc.data();
                     // If chunked, assemble parts
@@ -1951,7 +1951,7 @@
                         const smeta = tdata.data.sheets_manifest[sname];
                         let allRows = [];
                         for (let c = 0; c < smeta.total_chunks; c++) {
-                          const cDoc = await FIREBASE_DB.collection('facility_trackers').document(`tracker_${tid}_${sname}_chunk_${c}`).get();
+                          const cDoc = await FIREBASE_DB.collection('facility_trackers').doc(`tracker_${tid}_${sname}_chunk_${c}`).get();
                           if (cDoc.exists) {
                             allRows = allRows.concat(cDoc.data().rows || []);
                           }
