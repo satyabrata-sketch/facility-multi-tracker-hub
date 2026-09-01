@@ -144,6 +144,13 @@
 
       <!-- Top Right Action Controls -->
       <div class="flex items-center space-x-2 text-xs">
+        <!-- Direct OneDrive / Excel Online Co-Authoring Launcher -->
+        <button onclick="openOneDriveModal()" title="Open actual direct Excel Online file in OneDrive / SharePoint"
+          class="flex items-center space-x-1.5 px-3 py-1 rounded bg-[#005a9e] hover:bg-[#004578] font-bold shadow-sm transition active:scale-95 cursor-pointer">
+          <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>
+          <span>OneDrive Live</span>
+        </button>
+
         <button onclick="downloadCurrentExcelWorkbook()" title="Download current workbook as authentic .xlsx"
           class="flex items-center space-x-1.5 px-3 py-1 rounded bg-[#0b5a2f] hover:bg-[#084222] font-semibold transition active:scale-95 cursor-pointer">
           <i data-lucide="download" class="w-3.5 h-3.5"></i>
@@ -268,6 +275,13 @@
   <!-- 3. MAIN SPREADSHEET GRID (THE ACTUAL EXCEL SHEET) -->
   <!-- ========================================================================= -->
   <div class="flex-1 overflow-auto custom-scrollbar bg-white relative" id="grid-scroll-container">
+    
+    <!-- IFRAME CONTAINER FOR DIRECT ONEDRIVE / EXCEL ONLINE EMBED -->
+    <div id="onedrive-embed-container" class="hidden w-full h-full bg-white relative">
+      <iframe id="onedrive-iframe" class="w-full h-full border-0" allowfullscreen></iframe>
+    </div>
+
+    <!-- NATIVE SPREADSHEET GRID -->
     <table class="excel-grid min-w-full" id="main-excel-table">
       
       <!-- Excel Header Row (A, B, C, D, ...) -->
@@ -300,12 +314,17 @@
         <!-- Sheet tab buttons populated via JS (e.g. 🛠️ Breakdown Tracker 2026, 🔐 Master Tracker, ⚠️ Action List) -->
       </div>
 
-      <!-- Add Custom Sheet Tab Button -->
-      <button onclick="createNewSheetInCurrentTracker()" title="Add new sheet to this tracker"
-        class="px-2 py-1 text-slate-500 hover:text-[#107c41] hover:bg-[#edebe9] rounded text-xs font-bold transition cursor-pointer flex items-center space-x-1">
-        <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-        <span>New Sheet</span>
-      </button>
+      <!-- Toggle View Mode: Native Grid vs Direct OneDrive Web -->
+      <div class="flex items-center space-x-1 py-1">
+        <button id="btn-toggle-view-grid" onclick="toggleEmbedMode(false)"
+          class="px-2.5 py-1 rounded text-xs font-bold bg-[#107c41] text-white shadow-sm transition cursor-pointer">
+          Grid View
+        </button>
+        <button id="btn-toggle-view-embed" onclick="toggleEmbedMode(true)"
+          class="px-2.5 py-1 rounded text-xs font-semibold bg-[#f3f2f1] text-[#605e5c] hover:bg-[#edebe9] border border-[#d2d0ce] transition cursor-pointer">
+          OneDrive Embed
+        </button>
+      </div>
 
     </div>
 
@@ -331,6 +350,62 @@
 
   </footer>
 
+  <!-- ========================================================================= -->
+  <!-- MODAL: ONEDRIVE DIRECT EXCEL CO-AUTHORING & EMBED CONFIG -->
+  <!-- ========================================================================= -->
+  <div id="modal-onedrive" class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 border border-slate-200">
+      
+      <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+        <div class="flex items-center space-x-2.5">
+          <div class="p-2 rounded-xl bg-[#005a9e] text-white">
+            <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-slate-900">Direct OneDrive / Excel Online Co-Authoring</h3>
+            <p class="text-xs text-slate-500">Collaborate with multi-user live cursors on Microsoft 365</p>
+          </div>
+        </div>
+        <button onclick="closeOneDriveModal()" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs text-slate-700 leading-relaxed">
+        <div class="p-3.5 rounded-xl bg-sky-50 border border-sky-200 space-y-2">
+          <h4 class="font-bold text-sky-950 flex items-center space-x-1.5">
+            <span>🌐 Direct Microsoft Excel Online Link</span>
+          </h4>
+          <p class="text-[11px] text-sky-900">
+            Paste your OneDrive / SharePoint sharing link or embed URL below for <b id="od-modal-tracker-name">Breakdown Tracker.xlsx</b>:
+          </p>
+          <input type="text" id="od-input-link" placeholder="https://cbre.sharepoint.com/:x:/r/... or https://onedrive.live.com/embed?..."
+            class="w-full px-3 py-2 rounded-xl bg-white border border-sky-300 focus:outline-none focus:ring-2 focus:ring-[#005a9e] font-mono text-xs">
+        </div>
+
+        <div class="flex items-center justify-between pt-2">
+          <button onclick="launchOneDriveInNewTab()"
+            class="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-[#005a9e] hover:bg-[#004578] text-white font-bold shadow-sm transition cursor-pointer">
+            <i data-lucide="external-link" class="w-4 h-4"></i>
+            <span>Open in Excel for Web (New Tab)</span>
+          </button>
+          <button onclick="saveOneDriveEmbedLink()"
+            class="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-[#107c41] hover:bg-[#0e6b37] text-white font-bold shadow-sm transition cursor-pointer">
+            <i data-lucide="save" class="w-4 h-4"></i>
+            <span>Embed Directly on Screen</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-200 flex justify-end">
+        <button onclick="closeOneDriveModal()" class="px-4 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer text-xs">
+          Close
+        </button>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Toast Notification Container -->
   <div id="toast-container" class="fixed bottom-12 right-5 z-50 space-y-2 pointer-events-none"></div>
 
@@ -345,9 +420,13 @@
     let SELECTED_ROW_IDX = 0;
     let SELECTED_COL_NAME = '';
     let SHEET_SEARCH_TERM = '';
-    let PENDING_EDITS = {}; // { rowIdx: { colName: val } }
+    let PENDING_EDITS = {};
     let FIREBASE_DB = null;
     let IS_CONNECTED = false;
+    let IS_EMBED_MODE = false;
+
+    // Local Storage for OneDrive Embed Links
+    const ONEDRIVE_LINKS = JSON.parse(localStorage.getItem('facility_onedrive_links') || '{}');
 
     // Excel Column Letter Generator (0 -> A, 1 -> B, ..., 26 -> AA)
     function getExcelColLetter(n) {
@@ -471,7 +550,11 @@
         activeBtn.classList.remove('text-white', 'hover:bg-[#0b5a2f]');
       }
 
-      renderSpreadsheetView();
+      if (IS_EMBED_MODE) {
+        loadEmbedForActiveWorkbook();
+      } else {
+        renderSpreadsheetView();
+      }
     }
 
     // 3. Render the Authentic Spreadsheet View
@@ -585,11 +668,8 @@
       tbody.innerHTML = '';
       rows.forEach((row, rowIdx) => {
         const tr = document.createElement('tr');
-        
-        // Row Number Column (1, 2, 3, ...)
         let rowHtml = `<td class="excel-header-row py-1">${rowIdx + 1}</td>`;
 
-        // Data Cells
         headers.forEach((h, colIdx) => {
           const val = (row[h] !== undefined && row[h] !== null) ? row[h] : '';
           const isEdited = PENDING_EDITS[rowIdx] && PENDING_EDITS[rowIdx][h] !== undefined;
@@ -617,8 +697,6 @@
     function handleCellFocus(rowIdx, colName, cellCoord, cellEl) {
       SELECTED_ROW_IDX = rowIdx;
       SELECTED_COL_NAME = colName;
-      
-      // Update Name Box and Formula Bar
       document.getElementById('excel-name-box').innerText = cellCoord;
       document.getElementById('excel-formula-bar').value = cellEl.innerText;
       document.getElementById('status-selection-info').innerText = `Selected: ${cellCoord} (${colName})`;
@@ -642,9 +720,7 @@
 
     function handleFormulaBarInput(val) {
       const activeCell = document.querySelector(`.excel-cell:focus`);
-      if (activeCell) {
-        activeCell.innerText = val;
-      }
+      if (activeCell) activeCell.innerText = val;
     }
 
     function handleFormulaBarKeyDown(e) {
@@ -666,7 +742,6 @@
     function handleCellKeyDown(e, rowIdx, colIdx) {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        // Move to cell below
         const nextCell = document.querySelector(`td.excel-cell[data-row="${rowIdx + 1}"]`);
         if (nextCell) nextCell.focus();
       }
@@ -696,7 +771,6 @@
       showToast('➕ Inserted new row. Click any cell to fill and click "Push Changes Live".');
     }
 
-    // 7. Update Pending Edits Indicator & Push to Cloud
     function updatePendingEditsUI() {
       const count = Object.keys(PENDING_EDITS).length;
       const btn = document.getElementById('btn-push-live');
@@ -749,6 +823,77 @@
       renderSpreadsheetGrid();
     }
 
+    // 7. Direct OneDrive / Excel Online Co-Authoring & Embed
+    function openOneDriveModal() {
+      const curTracker = APP_DATA?.trackers?.[ACTIVE_WORKBOOK_ID];
+      const title = curTracker?.meta?.filename || `${ACTIVE_WORKBOOK_ID}.xlsx`;
+      document.getElementById('od-modal-tracker-name').innerText = title;
+      document.getElementById('od-input-link').value = ONEDRIVE_LINKS[ACTIVE_WORKBOOK_ID] || '';
+      document.getElementById('modal-onedrive').classList.remove('hidden');
+    }
+
+    function closeOneDriveModal() {
+      document.getElementById('modal-onedrive').classList.add('hidden');
+    }
+
+    function saveOneDriveEmbedLink() {
+      const link = document.getElementById('od-input-link').value.trim();
+      if (link) {
+        ONEDRIVE_LINKS[ACTIVE_WORKBOOK_ID] = link;
+        localStorage.setItem('facility_onedrive_links', JSON.stringify(ONEDRIVE_LINKS));
+        toggleEmbedMode(true);
+        closeOneDriveModal();
+        showToast('✓ Embedded direct OneDrive Excel file!');
+      } else {
+        alert('Please enter a valid OneDrive or SharePoint sharing link.');
+      }
+    }
+
+    function launchOneDriveInNewTab() {
+      const link = document.getElementById('od-input-link').value.trim() || ONEDRIVE_LINKS[ACTIVE_WORKBOOK_ID];
+      if (link) {
+        window.open(link, '_blank');
+      } else {
+        alert('Please enter your OneDrive share link above to open in Excel for Web.');
+      }
+    }
+
+    function toggleEmbedMode(isEmbed) {
+      IS_EMBED_MODE = isEmbed;
+      const btnGrid = document.getElementById('btn-toggle-view-grid');
+      const btnEmbed = document.getElementById('btn-toggle-view-embed');
+      const table = document.getElementById('main-excel-table');
+      const embedContainer = document.getElementById('onedrive-embed-container');
+
+      if (isEmbed) {
+        btnEmbed.className = 'px-2.5 py-1 rounded text-xs font-bold bg-[#005a9e] text-white shadow-sm transition cursor-pointer';
+        btnGrid.className = 'px-2.5 py-1 rounded text-xs font-semibold bg-[#f3f2f1] text-[#605e5c] hover:bg-[#edebe9] border border-[#d2d0ce] transition cursor-pointer';
+        table.classList.add('hidden');
+        embedContainer.classList.remove('hidden');
+        loadEmbedForActiveWorkbook();
+      } else {
+        btnGrid.className = 'px-2.5 py-1 rounded text-xs font-bold bg-[#107c41] text-white shadow-sm transition cursor-pointer';
+        btnEmbed.className = 'px-2.5 py-1 rounded text-xs font-semibold bg-[#f3f2f1] text-[#605e5c] hover:bg-[#edebe9] border border-[#d2d0ce] transition cursor-pointer';
+        embedContainer.classList.add('hidden');
+        table.classList.remove('hidden');
+        renderSpreadsheetView();
+      }
+    }
+
+    function loadEmbedForActiveWorkbook() {
+      const iframe = document.getElementById('onedrive-iframe');
+      const link = ONEDRIVE_LINKS[ACTIVE_WORKBOOK_ID];
+      if (link) {
+        let embedUrl = link;
+        if (!embedUrl.includes('embed') && !embedUrl.includes('action=embedview')) {
+          embedUrl = link.includes('?') ? `${link}&action=embedview` : `${link}?action=embedview`;
+        }
+        iframe.src = embedUrl;
+      } else {
+        openOneDriveModal();
+      }
+    }
+
     // 8. Download Excel Engine (Binary Blob for All Browsers)
     function downloadBlobFile(wb, filename) {
       try {
@@ -794,11 +939,6 @@
           }
         }
 
-        if (count === 0) {
-          showToast('No records to export.');
-          return;
-        }
-
         const safeTitle = (trData.meta?.short_title || trData.meta?.title || ACTIVE_WORKBOOK_ID).replace(/[^a-zA-Z0-9_\- ]/g, '').replace(/\s+/g, '_');
         const filename = `${safeTitle}_${new Date().toISOString().slice(0,10)}.xlsx`;
         downloadBlobFile(wb, filename);
@@ -838,7 +978,6 @@
       }
     }
 
-    // 9. Upload & Parse Excel File
     function handleExcelFileUpload(event) {
       const file = event.target.files?.[0];
       if (!file) return;
@@ -892,7 +1031,6 @@
             }
           });
 
-          // Match tracker ID
           const fname = file.name.toLowerCase();
           let matchedTid = 'breakdown';
           if (fname.includes('lock') || fname.includes('key')) matchedTid = 'locker';
@@ -925,30 +1063,6 @@
       reader.readAsArrayBuffer(file);
     }
 
-    function createNewSheetInCurrentTracker() {
-      const name = prompt('Enter new sheet name:');
-      if (!name) return;
-
-      const curTracker = APP_DATA?.trackers?.[ACTIVE_WORKBOOK_ID];
-      if (!curTracker || !curTracker.data) return;
-
-      if (!curTracker.data.sheets) curTracker.data.sheets = {};
-      const baseSheet = Object.values(curTracker.data.sheets)[0];
-      const headers = baseSheet ? baseSheet.headers : ['Sr. No.', 'Title', 'Date', 'Status', 'Remarks'];
-
-      curTracker.data.sheets[name] = {
-        sheet_name: name,
-        headers: headers,
-        rows: [],
-        row_count: 0
-      };
-
-      ACTIVE_SHEET_KEY = name;
-      renderSpreadsheetView();
-      showToast(`➕ Added new sheet "${name}".`);
-    }
-
-    // 10. Toast Notification
     function showToast(msg) {
       const container = document.getElementById('toast-container');
       if (!container) return;
