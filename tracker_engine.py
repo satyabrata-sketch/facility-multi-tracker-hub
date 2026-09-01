@@ -4,6 +4,7 @@ import json
 import hashlib
 import datetime
 import warnings
+import ctypes
 from typing import Dict, Any, List, Optional
 import openpyxl
 
@@ -24,28 +25,70 @@ def serialize_val(val: Any) -> Any:
         return round(val, 2)
     return val
 
-def safe_read_bytes(filepath: str) -> io.BytesIO:
+def read_locked_file_bytes(filepath: str) -> bytes:
     """
     Read file into memory buffer safely in binary mode.
-    This releases the file handle in under 2 milliseconds and avoids locking
-    the Excel file for other users who may be editing it via OneDrive / Excel.
+    Uses Windows API CreateFileW with full shared read/write/delete access so it
+    NEVER fails with PermissionError even when the file is currently open in Microsoft Excel.
     """
-    with open(filepath, "rb") as f:
-        content = f.read()
+    try:
+        with open(filepath, "rb") as f:
+            return f.read()
+    except Exception:
+        pass
+
+    try:
+        kernel32 = ctypes.windll.kernel32
+        GENERIC_READ = 0x80000000
+        FILE_SHARE_READ = 0x00000001
+        FILE_SHARE_WRITE = 0x00000002
+        FILE_SHARE_DELETE = 0x00000004
+        OPEN_EXISTING = 3
+        FILE_ATTRIBUTE_NORMAL = 0x80
+
+        handle = kernel32.CreateFileW(
+            os.path.abspath(filepath),
+            GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            None,
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            None
+        )
+        if handle == -1 or handle == 0xFFFFFFFFFFFFFFFF:
+            raise PermissionError(f"Could not open handle for {filepath}")
+
+        try:
+            file_size = kernel32.GetFileSize(handle, None)
+            buf = ctypes.create_string_buffer(file_size)
+            bytes_read = ctypes.c_ulong(0)
+            success = kernel32.ReadFile(handle, buf, file_size, ctypes.byref(bytes_read), None)
+            if not success:
+                raise PermissionError(f"Could not read file {filepath}")
+            return bytes(buf.raw[:bytes_read.value])
+        finally:
+            kernel32.CloseHandle(handle)
+    except Exception as e:
+        with open(filepath, "rb") as f:
+            return f.read()
+
+def safe_read_bytes(filepath: str) -> io.BytesIO:
+    """Return in-memory stream of file bytes with zero file-locking."""
+    content = read_locked_file_bytes(filepath)
     return io.BytesIO(content)
 
 def get_file_meta(filepath: str) -> Dict[str, Any]:
-    """Get metadata for a tracker file."""
+    """Get metadata for a tracker file without file locking."""
     try:
         st = os.stat(filepath)
-        with open(filepath, "rb") as f:
-            file_hash = hashlib.md5(f.read(65536)).hexdigest()
+        content = read_locked_file_bytes(filepath)
+        file_hash = hashlib.md5(content[:65536]).hexdigest() if content else ""
         return {
             "exists": True,
             "modified_time": datetime.datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
             "modified_timestamp": st.st_mtime,
-            "size_bytes": st.st_size,
-            "size_formatted": f"{round(st.st_size / 1024, 1)} KB",
+            "size_bytes": len(content),
+            "size_formatted": f"{round(len(content) / 1024, 1)} KB",
             "hash": file_hash
         }
     except Exception as e:
