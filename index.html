@@ -127,6 +127,14 @@
         <!-- Right: Actions & Tools -->
         <div class="flex items-center space-x-2">
           
+          <!-- Live Watcher Daemon Modal Button -->
+          <button id="btn-sync-daemon-modal" onclick="openSyncDaemonModal()" title="Start / Manage Background Real-time Excel Watcher"
+            class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white text-xs font-bold shadow-sm shadow-emerald-700/30 transition-all duration-150 cursor-pointer">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <i data-lucide="radio" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Live Watcher</span>
+          </button>
+
           <!-- Upload / Drop Excel Tracker Button -->
           <button id="btn-upload-tracker" onclick="openUploadModal()" title="Upload or Drop Excel Tracker File"
             class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 active:scale-95 text-white text-xs font-semibold shadow-sm shadow-sky-600/30 transition-all duration-150 cursor-pointer">
@@ -1621,6 +1629,86 @@
     </div>
   </div>
 
+  <!-- MODAL: LIVE SYNC DAEMON & REALTIME CONTROL -->
+  <div id="sync-daemon-modal" class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="glass-card max-w-xl w-full rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
+        <div class="flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
+            <span>⚡ Real-Time Cloud Sync & Watcher Daemon</span>
+          </h3>
+        </div>
+        <button onclick="closeSyncDaemonModal()" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3.5 text-xs">
+        <!-- Live Connection Card -->
+        <div class="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-start space-x-3">
+          <div class="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 mt-0.5">
+            <i data-lucide="radio" class="w-5 h-5"></i>
+          </div>
+          <div class="flex-1">
+            <h4 class="font-bold text-emerald-900 dark:text-emerald-200 text-xs">Firebase Cloud Live Stream Active</h4>
+            <p class="text-[11px] text-emerald-700/90 dark:text-emerald-300/90 mt-0.5 leading-relaxed">
+              Any Excel changes synced to Firebase are streamed directly to this web app across all devices, mobile phones, and laptops in real time without refreshing!
+            </p>
+          </div>
+        </div>
+
+        <!-- How Desktop Auto-Sync Works -->
+        <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-2">
+          <h4 class="font-bold text-slate-900 dark:text-white flex items-center justify-between">
+            <span>🖥️ Desktop Auto-Sync Watcher</span>
+            <span id="daemon-run-status" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">Ready</span>
+          </h4>
+          <p class="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+            Running <code class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800 font-mono text-emerald-600 font-bold">start_firebase_sync.bat</code> on your PC continuously monitors your Excel files for any saves (<code class="font-mono">Ctrl + S</code>) and uploads them instantly.
+          </p>
+
+          <div class="pt-2 flex flex-wrap items-center gap-2">
+            <button id="btn-start-daemon-web" onclick="startSyncDaemonFromWeb()"
+              class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold shadow-sm shadow-emerald-600/30 transition cursor-pointer">
+              <i data-lucide="play" class="w-3.5 h-3.5"></i>
+              <span id="btn-start-daemon-label">Launch Watcher Process</span>
+            </button>
+            <button onclick="triggerManualSync(); closeSyncDaemonModal();"
+              class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 active:scale-95 text-white text-xs font-bold shadow-sm shadow-sky-600/30 transition cursor-pointer">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+              <span>Sync All Files Now</span>
+            </button>
+          </div>
+          <div id="daemon-web-result" class="hidden text-[11px] font-semibold text-emerald-600 mt-1"></div>
+        </div>
+
+        <!-- Direct In-Browser Uploader (For Any Device) -->
+        <div class="p-3.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/50 space-y-2">
+          <h4 class="font-bold text-indigo-900 dark:text-indigo-200 flex items-center space-x-1.5">
+            <i data-lucide="file-up" class="w-4 h-4 text-indigo-600"></i>
+            <span>📱 Sync from Any Device (Mobile / Non-PC)</span>
+          </h4>
+          <p class="text-[11px] text-indigo-700 dark:text-indigo-300 leading-relaxed">
+            If you are using a mobile phone or another computer without the script, click below to select or drag your updated Excel file. It will parse and update all connected devices in $<1$ second.
+          </p>
+          <button onclick="closeSyncDaemonModal(); openUploadModal();"
+            class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold shadow-sm shadow-indigo-600/30 transition cursor-pointer">
+            <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+            <span>Upload & Sync Excel File</span>
+          </button>
+        </div>
+
+      </div>
+
+      <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-end">
+        <button onclick="closeSyncDaemonModal()" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-800 dark:text-slate-200 text-xs font-semibold cursor-pointer">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: ROW DETAIL VIEWER -->
   <div id="detail-modal" class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
     <div class="glass-card max-w-2xl w-full rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
@@ -1665,29 +1753,69 @@
       st: { page: 1, size: 15, sortCol: '', sortDir: 'asc', filtered: [] }
     };
 
-    // Universal Excel Downloader (Works in HTTP Server & file:// Mode)
-    function downloadTrackerExcel(trackerId) {
-      let fileUrl = '';
-      if (window.location.protocol.startsWith('http')) {
-        fileUrl = `/api/download/${trackerId}`;
-      } else {
-        if (trackerId === 'breakdown') fileUrl = 'Breakdown/Breakdown Tracker.xlsx';
-        else if (trackerId === 'locker') fileUrl = 'Locker/Keys Lock Tracker - 2026 1.xlsx';
-        else if (trackerId === 'events') fileUrl = 'Event/Yearly Event Tracker- DT-3 and DT-4 Updated.xlsx';
-        else if (trackerId === 'fnb') fileUrl = 'F&B/Event_Tracker_Pro_Executive_Dashboard.xlsx';
-        else if (trackerId === 'staff') fileUrl = 'VAS/Contractual Staff Details_Updated.xlsx';
-        else if (APP_DATA && APP_DATA.trackers && APP_DATA.trackers[trackerId]) {
-          fileUrl = APP_DATA.trackers[trackerId].meta?.relative_path || '';
-        }
-      }
-
-      if (fileUrl) {
+    // Universal Excel Downloader with Binary Blob fallback
+    function downloadWorkbookBlob(wb, filename) {
+      try {
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = encodeURI(fileUrl.replace(/\\/g, '/'));
-        a.download = '';
+        a.href = url;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
-        document.body.removeChild(a);
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 800);
+        showToast(`📥 Downloaded "${filename}" successfully!`);
+      } catch (e) {
+        console.warn('Blob download fallback, calling XLSX.writeFile:', e);
+        XLSX.writeFile(wb, filename);
+        showToast(`📥 Downloaded "${filename}"!`);
+      }
+    }
+
+    function downloadTrackerExcel(trackerId) {
+      if (!trackerId || trackerId === 'all' || trackerId === 'overview') {
+        downloadAllTrackersWorkbook();
+        return;
+      }
+
+      if (!APP_DATA || !APP_DATA.trackers || !APP_DATA.trackers[trackerId]) {
+        downloadAllTrackersWorkbook();
+        return;
+      }
+
+      const tracker = APP_DATA.trackers[trackerId];
+      const sheets = tracker.data?.sheets || {};
+      
+      try {
+        const wb = XLSX.utils.book_new();
+        let sheetCount = 0;
+
+        for (let sname in sheets) {
+          const sdata = sheets[sname];
+          const rows = sdata.rows || [];
+          if (rows.length > 0) {
+            const ws = XLSX.utils.json_to_sheet(rows, { header: sdata.headers });
+            const cleanSheetName = sname.slice(0, 31).replace(/[:\\\/\?\*\[\]]/g, '_');
+            XLSX.utils.book_append_sheet(wb, ws, cleanSheetName);
+            sheetCount++;
+          }
+        }
+
+        if (sheetCount === 0) {
+          downloadAllTrackersWorkbook();
+          return;
+        }
+
+        const safeTitle = (tracker.meta?.short_title || tracker.meta?.title || trackerId).replace(/[^a-zA-Z0-9_\- ]/g, '').replace(/\s+/g, '_');
+        const filename = `${safeTitle}_${new Date().toISOString().slice(0,10)}.xlsx`;
+        downloadWorkbookBlob(wb, filename);
+      } catch (err) {
+        console.error('Download error:', err);
+        alert('Could not generate Excel file: ' + err.message);
       }
     }
 
@@ -2102,18 +2230,20 @@
     // =========================================================================
     function downloadCurrentActiveTracker() {
       if (!APP_DATA || !APP_DATA.trackers) {
-        alert('Data is still loading, please wait a moment.');
+        showToast('Data is still loading, please wait a moment.');
         return;
       }
 
-      if (CURRENT_TAB === 'overview') {
+      const activeTab = (typeof ACTIVE_MAIN_TAB !== 'undefined' && ACTIVE_MAIN_TAB) ? ACTIVE_MAIN_TAB : 'overview';
+
+      if (activeTab === 'overview') {
         downloadAllTrackersWorkbook();
         return;
       }
 
-      const tracker = APP_DATA.trackers[CURRENT_TAB];
+      const tracker = APP_DATA.trackers[activeTab];
       if (!tracker || !tracker.data || !tracker.data.sheets) {
-        showToast('No dataset available to download for this tab.');
+        downloadAllTrackersWorkbook();
         return;
       }
 
@@ -2127,20 +2257,20 @@
           const rows = sdata.rows || [];
           if (rows.length > 0) {
             const ws = XLSX.utils.json_to_sheet(rows, { header: sdata.headers });
-            XLSX.utils.book_append_sheet(wb, ws, sname.slice(0, 31).replace(/[:\\\/\?\*\[\]]/g, '_'));
+            const cleanSheetName = sname.slice(0, 31).replace(/[:\\\/\?\*\[\]]/g, '_');
+            XLSX.utils.book_append_sheet(wb, ws, cleanSheetName);
             sheetCount++;
           }
         }
 
         if (sheetCount === 0) {
-          showToast('No records found to export.');
+          downloadAllTrackersWorkbook();
           return;
         }
 
-        const safeTitle = (tracker.meta?.title || CURRENT_TAB).replace(/[^a-zA-Z0-9_\- ]/g, '').replace(/\s+/g, '_');
+        const safeTitle = (tracker.meta?.short_title || tracker.meta?.title || activeTab).replace(/[^a-zA-Z0-9_\- ]/g, '').replace(/\s+/g, '_');
         const filename = `${safeTitle}_${new Date().toISOString().slice(0,10)}.xlsx`;
-        XLSX.writeFile(wb, filename);
-        showToast(`📥 Downloaded "${filename}" successfully!`);
+        downloadWorkbookBlob(wb, filename);
       } catch (err) {
         console.error('Download error:', err);
         alert('Could not generate Excel file: ' + err.message);
@@ -2149,7 +2279,7 @@
 
     function downloadAllTrackersWorkbook() {
       if (!APP_DATA || !APP_DATA.trackers) {
-        alert('No data available to download.');
+        showToast('No tracker data available to download.');
         return;
       }
 
@@ -2175,16 +2305,63 @@
         }
 
         if (totalSheets === 0) {
-          showToast('No data available in trackers.');
+          showToast('No records available in trackers.');
           return;
         }
 
         const filename = `Facility_Multi_Trackers_Master_${new Date().toISOString().slice(0,10)}.xlsx`;
-        XLSX.writeFile(wb, filename);
-        showToast(`📥 Downloaded Master Excel Workbook (${totalSheets} sheets)!`);
+        downloadWorkbookBlob(wb, filename);
       } catch (err) {
         console.error('Master export error:', err);
         alert('Export error: ' + err.message);
+      }
+    }
+
+    // =========================================================================
+    // LIVE SYNC DAEMON MODAL & WEB LAUNCHER
+    // =========================================================================
+    function openSyncDaemonModal() {
+      document.getElementById('sync-daemon-modal').classList.remove('hidden');
+    }
+
+    function closeSyncDaemonModal() {
+      document.getElementById('sync-daemon-modal').classList.add('hidden');
+    }
+
+    async function startSyncDaemonFromWeb() {
+      const btn = document.getElementById('btn-start-daemon-web');
+      const label = document.getElementById('btn-start-daemon-label');
+      const statusBadge = document.getElementById('daemon-run-status');
+      const resultEl = document.getElementById('daemon-web-result');
+
+      label.innerText = 'Launching...';
+      btn.disabled = true;
+
+      try {
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (isLocal) {
+          const resp = await fetch('/api/start-sync');
+          const data = await resp.json();
+          resultEl.classList.remove('hidden');
+          resultEl.innerText = `✓ ${data.message || 'Watcher process active in background!'}`;
+          statusBadge.innerText = 'Running';
+          statusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
+          showToast('🚀 Background Watcher process running!');
+        } else {
+          // On Vercel: explain how cloud streams directly
+          resultEl.classList.remove('hidden');
+          resultEl.innerHTML = `💡 On cloud deployment: Run <b>start_firebase_sync.bat</b> on your PC, or upload files using the button below to sync live to all devices!`;
+          statusBadge.innerText = 'Cloud Active';
+          statusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300';
+        }
+      } catch (e) {
+        resultEl.classList.remove('hidden');
+        resultEl.innerText = 'Could not reach local server. Double-click start_firebase_sync.bat in your folder.';
+      } finally {
+        setTimeout(() => {
+          btn.disabled = false;
+          label.innerText = 'Launch Watcher Process';
+        }, 1000);
       }
     }
 

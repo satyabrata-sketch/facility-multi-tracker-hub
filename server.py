@@ -113,6 +113,34 @@ class TrackerRequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
             return
 
+        # 1.4. API: Start Background Excel Watcher Daemon
+        if path == "/api/start-sync":
+            global SYNC_PROCESS
+            try:
+                import subprocess
+                if SYNC_PROCESS is None or SYNC_PROCESS.poll() is not None:
+                    script_path = os.path.join(WORKSPACE_ROOT, "firebase_sync.py")
+                    SYNC_PROCESS = subprocess.Popen(
+                        [sys.executable, script_path, "--watch", "--interval", "2"],
+                        creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+                    )
+                    msg = "Live Background Watcher launched successfully!"
+                else:
+                    msg = "Background sync watcher is already actively running."
+
+                self.send_response(200)
+                self.send_cors_headers()
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok", "message": msg}).encode("utf-8"))
+            except Exception as e:
+                self.send_response(500)
+                self.send_cors_headers()
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
+            return
+
         # 1.5. API: Force Fresh Sync of All Excel Files + Cloud Broadcast
         if path == "/api/sync":
             try:
