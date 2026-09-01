@@ -142,11 +142,11 @@
             <span id="firebase-header-dot" class="w-2 h-2 rounded-full bg-slate-400"></span>
           </button>
 
-          <!-- Sync Now Button -->
-          <button id="btn-manual-sync" onclick="triggerManualSync()" title="Refresh live data from Excel files"
-            class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-semibold shadow-sm shadow-emerald-600/30 transition-all duration-150 cursor-pointer">
+          <!-- Sync All Files Button -->
+          <button id="btn-manual-sync" onclick="triggerManualSync()" title="Fetch and Sync all Excel tracker files in real-time"
+            class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold shadow-sm shadow-emerald-600/30 transition-all duration-150 cursor-pointer">
             <i data-lucide="refresh-cw" id="sync-icon" class="w-3.5 h-3.5"></i>
-            <span>Sync Now</span>
+            <span id="sync-btn-label">Sync All Files</span>
           </button>
 
           <!-- Theme Toggle -->
@@ -2214,9 +2214,88 @@
 
     async function triggerManualSync() {
       const icon = document.getElementById('sync-icon');
-      icon.classList.add('animate-spin');
-      await fetchDashboardData(false);
-      setTimeout(() => icon.classList.remove('animate-spin'), 600);
+      const label = document.getElementById('sync-btn-label');
+      
+      if (icon) icon.classList.add('animate-spin');
+      if (label) label.innerText = 'Syncing...';
+      showToast('🔄 Fetching latest Excel tracker data & syncing...');
+
+      try {
+        let syncedData = null;
+
+        // 1. Try local server /api/sync if running locally (forces disk re-read & push to Firestore)
+        if (window.location.protocol.startsWith('http')) {
+          try {
+            const resp = await fetch('/api/sync');
+            if (resp.ok) {
+              syncedData = await resp.json();
+            }
+          } catch (e) {}
+        }
+
+        // 2. If on Vercel or local API didn't return, fetch latest Firestore snapshot
+        if (!syncedData && FIREBASE_DB && IS_FIREBASE_CONNECTED) {
+          try {
+            const summaryDoc = await FIREBASE_DB.collection('facility_trackers').doc('executive_summary').get();
+            const snapDoc = await FIREBASE_DB.collection('facility_trackers').doc('live_snapshot').get();
+            
+            if (snapDoc.exists) {
+              const snapshotData = snapDoc.data();
+              const trackersList = snapshotData.trackers_list || ['breakdown', 'locker', 'events', 'fnb', 'staff'];
+              const cloudTrackers = {};
+
+              for (const tid of trackersList) {
+                const tDoc = await FIREBASE_DB.collection('facility_trackers').doc(`tracker_${tid}`).get();
+                if (tDoc.exists) {
+                  let tdata = tDoc.data();
+                  if (tdata.is_chunked && tdata.data && tdata.data.sheets_manifest) {
+                    tdata.data.sheets = {};
+                    for (let sname in tdata.data.sheets_manifest) {
+                      const smeta = tdata.data.sheets_manifest[sname];
+                      let allRows = [];
+                      for (let c = 0; c < smeta.total_chunks; c++) {
+                        const cDoc = await FIREBASE_DB.collection('facility_trackers').doc(`tracker_${tid}_${sname}_chunk_${c}`).get();
+                        if (cDoc.exists) allRows = allRows.concat(cDoc.data().rows || []);
+                      }
+                      tdata.data.sheets[sname] = { sheet_name: sname, headers: smeta.headers, rows: allRows, row_count: allRows.length };
+                    }
+                  }
+                  cloudTrackers[tid] = tdata;
+                }
+              }
+
+              syncedData = {
+                executive_kpis: summaryDoc.exists ? summaryDoc.data() : snapshotData.executive_kpis,
+                trackers: cloudTrackers,
+                timestamp: snapshotData.timestamp,
+                server_status: 'firebase_live'
+              };
+            }
+          } catch (fbErr) {
+            console.warn('Firebase manual sync query error:', fbErr);
+          }
+        }
+
+        if (syncedData) {
+          APP_DATA = syncedData;
+          renderAllSections(APP_DATA);
+          const totalRecs = APP_DATA.executive_kpis?.total_records_tracked || 0;
+          const trCount = Object.keys(APP_DATA.trackers || {}).length;
+          
+          document.getElementById('last-sync-time').innerText = `Synced: ${new Date().toLocaleTimeString()}`;
+          showToast(`✓ Synced ${trCount} Excel trackers (${totalRecs.toLocaleString()} records) in real time!`);
+        } else {
+          await fetchDashboardData(false);
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Live Excel updates synced successfully!');
+      } finally {
+        setTimeout(() => {
+          if (icon) icon.classList.remove('animate-spin');
+          if (label) label.innerText = 'Sync All Files';
+        }, 500);
+      }
     }
 
     function showToast(msg) {

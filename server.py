@@ -113,6 +113,30 @@ class TrackerRequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
             return
 
+        # 1.5. API: Force Fresh Sync of All Excel Files + Cloud Broadcast
+        if path == "/api/sync":
+            try:
+                CACHE["data"] = None
+                data = get_cached_or_fresh_data()
+                try:
+                    import firebase_sync
+                    firebase_sync.sync_via_firebase_admin(data)
+                except Exception as fb_err:
+                    sys.stderr.write(f"[!] Firebase sync on /api/sync: {fb_err}\n")
+
+                self.send_response(200)
+                self.send_cors_headers()
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps(data).encode("utf-8"))
+            except Exception as e:
+                self.send_response(500)
+                self.send_cors_headers()
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
+            return
+
         # 2. API: Full Data Payload (KPIs + Analytics + Table Data)
         if path == "/api/data":
             try:
