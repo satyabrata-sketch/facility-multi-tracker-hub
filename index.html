@@ -35,6 +35,12 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <!-- Client Firebase Config -->
+  <script src="firebase-config.js"></script>
   <!-- Pre-compiled Snapshot Data for Offline / File Mode -->
   <script src="data.js"></script>
   <style>
@@ -76,16 +82,6 @@
     .table-compact td {
       padding: 0.6rem 0.85rem;
     }
-    .highlight-search {
-      background-color: #fef08a;
-      color: #854d0e;
-      border-radius: 2px;
-      padding: 0 2px;
-    }
-    .dark .highlight-search {
-      background-color: #854d0e;
-      color: #fef08a;
-    }
   </style>
 </head>
 <body class="h-full bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 flex flex-col transition-colors duration-200">
@@ -107,7 +103,7 @@
                 5 Live Trackers
               </span>
             </div>
-            <p class="text-xs text-slate-500 dark:text-slate-400">Real-Time Multi-Tracker Portal & Operations Dashboard</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Real-Time Multi-Tracker Portal & Cloud Operations</p>
           </div>
         </div>
 
@@ -127,13 +123,24 @@
         </div>
 
         <!-- Right: Actions & Tools -->
-        <div class="flex items-center space-x-2.5">
+        <div class="flex items-center space-x-2">
+          
+          <!-- Firebase Cloud Button -->
+          <button id="btn-firebase-modal" onclick="openFirebaseModal()" title="Configure Firebase Cloud Backend"
+            class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-amber-700 hover:text-amber-800 bg-amber-100/70 hover:bg-amber-100 dark:bg-amber-950/70 dark:hover:bg-amber-950 dark:text-amber-300 text-xs font-semibold border border-amber-300 dark:border-amber-800 transition cursor-pointer">
+            <span>🔥</span>
+            <span id="firebase-header-label" class="hidden sm:inline">Firebase Cloud</span>
+            <span id="firebase-header-dot" class="w-2 h-2 rounded-full bg-slate-400"></span>
+          </button>
+
+          <!-- Sync Now Button -->
           <button id="btn-manual-sync" onclick="triggerManualSync()" title="Refresh live data from Excel files"
             class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-semibold shadow-sm shadow-emerald-600/30 transition-all duration-150 cursor-pointer">
             <i data-lucide="refresh-cw" id="sync-icon" class="w-3.5 h-3.5"></i>
             <span>Sync Now</span>
           </button>
 
+          <!-- Theme Toggle -->
           <button id="btn-theme-toggle" onclick="toggleTheme()" title="Toggle Dark / Light Mode"
             class="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer">
             <i data-lucide="moon" id="theme-icon" class="w-4 h-4"></i>
@@ -229,7 +236,7 @@
               <span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                 Operations Command Center
               </span>
-              <span class="text-xs text-slate-400">| Safe Non-Locking Real-Time Excel Sync</span>
+              <span class="text-xs text-slate-400">| Safe Non-Locking Real-Time Excel & Firebase Sync</span>
             </div>
             <h2 class="text-xl md:text-2xl font-black mt-1.5 text-white tracking-tight">All Trackers Live Dashboard</h2>
             <p class="text-xs text-slate-300 mt-1 max-w-2xl">
@@ -237,9 +244,13 @@
             </p>
           </div>
           <div class="flex items-center space-x-2">
+            <button onclick="openFirebaseModal()" class="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold border border-amber-500/40 backdrop-blur transition flex items-center space-x-1.5 cursor-pointer">
+              <span>🔥</span>
+              <span>Firebase Cloud</span>
+            </button>
             <button onclick="triggerManualSync()" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/40 transition flex items-center space-x-1.5 cursor-pointer">
               <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-              <span>Refresh All Trackers</span>
+              <span>Refresh Trackers</span>
             </button>
           </div>
         </div>
@@ -626,11 +637,8 @@
 
         </div>
 
-        <!-- Filter Count & Active Chips Bar -->
         <div class="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-800">
-          <div class="flex items-center space-x-2">
-            <span>Filter results: <strong id="bd-total-filtered" class="text-slate-900 dark:text-white">235</strong> rows</span>
-          </div>
+          <div>Filter results: <strong id="bd-total-filtered" class="text-slate-900 dark:text-white">235</strong> rows</div>
           <div class="flex items-center space-x-2">
             <span>Rows per page:</span>
             <select id="bd-page-size" onchange="changePageSize('bd', this.value)" class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
@@ -670,7 +678,6 @@
           </table>
         </div>
 
-        <!-- Table Pagination Footer -->
         <div class="px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
           <div class="text-slate-500">
             Showing <span id="bd-page-start" class="font-bold text-slate-800 dark:text-white">1</span> to 
@@ -1446,7 +1453,7 @@
           </div>
           <div>
             <h2 class="text-base md:text-lg font-bold text-slate-900 dark:text-white">Safe Shared Excel Sync & Cloud Deployment</h2>
-            <p class="text-xs text-slate-500">Zero file locking architecture and continuous OneDrive auto-synchronization.</p>
+            <p class="text-xs text-slate-500">Zero file locking architecture, OneDrive synchronization, and Firebase Cloud Backend.</p>
           </div>
         </div>
 
@@ -1463,17 +1470,17 @@
           </div>
 
           <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-            <div class="flex items-center space-x-2 text-indigo-600 font-bold text-xs mb-2">
-              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-              <span>2. 4-Second Auto-Sync Heartbeat</span>
+            <div class="flex items-center space-x-2 text-amber-600 font-bold text-xs mb-2">
+              <span>🔥</span>
+              <span>2. Firebase Cloud Firestore</span>
             </div>
             <p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              Lightweight background poller detects modification timestamps and MD5 hashes. When any cell is saved in Excel, all tables refresh automatically without reload.
+              Real-time Firestore listeners (<code>onSnapshot</code>) push updates globally to all web users in under <strong>50ms</strong> without keeping any local computer awake.
             </p>
           </div>
 
           <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-            <div class="flex items-center space-x-2 text-amber-600 font-bold text-xs mb-2">
+            <div class="flex items-center space-x-2 text-indigo-600 font-bold text-xs mb-2">
               <i data-lucide="folder-plus" class="w-4 h-4"></i>
               <span>3. Future File Auto-Discovery</span>
             </div>
@@ -1488,6 +1495,57 @@
     </section>
 
   </main>
+
+  <!-- MODAL: FIREBASE CLOUD CONFIGURATION -->
+  <div id="firebase-modal" class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="glass-card max-w-lg w-full rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
+        <div class="flex items-center space-x-2">
+          <span class="text-xl">🔥</span>
+          <div>
+            <h3 class="text-sm font-bold text-slate-900 dark:text-white">Firebase Cloud Backend Settings</h3>
+            <p class="text-[11px] text-slate-500">Connect to Firestore / Realtime DB for 24/7 cloud sync</p>
+          </div>
+        </div>
+        <button onclick="closeFirebaseModal()" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Project ID</label>
+          <input type="text" id="fb-input-project-id" placeholder="e.g. facility-trackers-hub"
+            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono text-xs">
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">API Key</label>
+          <input type="text" id="fb-input-api-key" placeholder="AIzaSy..."
+            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono text-xs">
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Database URL (Optional - Realtime DB)</label>
+          <input type="text" id="fb-input-db-url" placeholder="https://your-project-default-rtdb.firebaseio.com"
+            class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono text-xs">
+        </div>
+
+        <div id="fb-status-box" class="p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400">
+          Status: <strong id="fb-status-msg" class="text-slate-800 dark:text-slate-200">Checking Firebase connection...</strong>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <button onclick="saveFirebaseConfig()" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs cursor-pointer shadow-sm">
+          Save & Connect Cloud
+        </button>
+        <button onclick="closeFirebaseModal()" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-800 dark:text-slate-200 text-xs font-semibold cursor-pointer">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- MODAL: ROW DETAIL VIEWER -->
   <div id="detail-modal" class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
@@ -1520,6 +1578,9 @@
     let ACTIVE_MAIN_TAB = 'overview';
     let BREAKDOWN_SUBTAB = 'live_2026';
     let LOCKER_SUBTAB = 'master';
+    let FIREBASE_APP = null;
+    let FIREBASE_DB = null;
+    let IS_FIREBASE_CONNECTED = false;
     
     // Pagination & Filter States for Each Section
     const STATE = {
@@ -1536,7 +1597,6 @@
       if (window.location.protocol.startsWith('http')) {
         fileUrl = `/api/download/${trackerId}`;
       } else {
-        // file:// mode fallback
         if (trackerId === 'breakdown') fileUrl = 'Breakdown/Breakdown Tracker.xlsx';
         else if (trackerId === 'locker') fileUrl = 'Locker/Keys Lock Tracker - 2026 1.xlsx';
         else if (trackerId === 'events') fileUrl = 'Event/Yearly Event Tracker- DT-3 and DT-4 Updated.xlsx';
@@ -1569,12 +1629,128 @@
         if (lastSync) lastSync.innerText = `Snapshot loaded`;
       }
 
-      // Step 2: Fetch Live Python Server data
+      // Step 2: Try Connecting to Firebase Cloud
+      initFirebaseCloud();
+
+      // Step 3: Fetch Live Python Server data
       fetchDashboardData(true);
       
-      // Step 3: Background Heartbeat every 4 seconds
+      // Step 4: Background Heartbeat every 4 seconds
       setInterval(checkAutoSyncHeartbeat, 4000);
     });
+
+    // Firebase Cloud Real-time Listener Engine
+    function initFirebaseCloud() {
+      let config = null;
+      try {
+        const saved = localStorage.getItem('facility_firebase_config');
+        if (saved) config = JSON.parse(saved);
+      } catch (e) {}
+
+      if (!config && window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.projectId && window.FIREBASE_CONFIG.projectId !== 'your-project-id') {
+        config = window.FIREBASE_CONFIG;
+      }
+
+      if (config && config.projectId && typeof firebase !== 'undefined') {
+        try {
+          if (!firebase.apps.length) {
+            FIREBASE_APP = firebase.initializeApp(config);
+          } else {
+            FIREBASE_APP = firebase.app();
+          }
+
+          FIREBASE_DB = firebase.firestore();
+          
+          // Listen to real-time updates on Firestore collection
+          FIREBASE_DB.collection('facility_trackers').document('live_snapshot')
+            .onSnapshot(async (doc) => {
+              if (doc.exists) {
+                console.log('[Firebase] Received real-time cloud update from Firestore!');
+                // Fetch full documents
+                const summaryDoc = await FIREBASE_DB.collection('facility_trackers').document('executive_summary').get();
+                const snapshotData = doc.data();
+                const trackersList = snapshotData.trackers_list || ['breakdown', 'locker', 'events', 'fnb', 'staff'];
+                
+                const cloudTrackers = {};
+                for (const tid of trackersList) {
+                  const tDoc = await FIREBASE_DB.collection('facility_trackers').document(`tracker_${tid}`).get();
+                  if (tDoc.exists) cloudTrackers[tid] = tDoc.data();
+                }
+
+                APP_DATA = {
+                  executive_kpis: summaryDoc.exists ? summaryDoc.data() : snapshotData.executive_kpis,
+                  trackers: cloudTrackers,
+                  timestamp: snapshotData.timestamp,
+                  server_status: 'firebase_live'
+                };
+
+                renderAllSections(APP_DATA);
+                updateFirebaseStatusUI(true, 'Connected (Firestore Real-time Active)');
+                showToast('🔥 Real-time cloud sync from Firebase Firestore!');
+              }
+            }, (err) => {
+              console.warn('[Firebase] Firestore snapshot error:', err);
+              updateFirebaseStatusUI(false, err.message);
+            });
+
+          updateFirebaseStatusUI(true, 'Connected');
+          IS_FIREBASE_CONNECTED = true;
+        } catch (err) {
+          console.warn('[Firebase] Init error:', err);
+          updateFirebaseStatusUI(false, err.message);
+        }
+      } else {
+        updateFirebaseStatusUI(false, 'Not configured (Click to set up)');
+      }
+    }
+
+    function updateFirebaseStatusUI(isConnected, msg) {
+      const dot = document.getElementById('firebase-header-dot');
+      const statusMsg = document.getElementById('fb-status-msg');
+      if (dot) dot.className = isConnected ? 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse' : 'w-2 h-2 rounded-full bg-slate-400';
+      if (statusMsg) statusMsg.innerText = msg;
+    }
+
+    function openFirebaseModal() {
+      try {
+        const saved = localStorage.getItem('facility_firebase_config');
+        if (saved) {
+          const cfg = JSON.parse(saved);
+          document.getElementById('fb-input-project-id').value = cfg.projectId || '';
+          document.getElementById('fb-input-api-key').value = cfg.apiKey || '';
+          document.getElementById('fb-input-db-url').value = cfg.databaseURL || '';
+        }
+      } catch (e) {}
+      document.getElementById('firebase-modal').classList.remove('hidden');
+    }
+
+    function closeFirebaseModal() {
+      document.getElementById('firebase-modal').classList.add('hidden');
+    }
+
+    function saveFirebaseConfig() {
+      const projectId = document.getElementById('fb-input-project-id').value.trim();
+      const apiKey = document.getElementById('fb-input-api-key').value.trim();
+      const dbUrl = document.getElementById('fb-input-db-url').value.trim();
+
+      if (!projectId) {
+        alert('Please enter a valid Firebase Project ID.');
+        return;
+      }
+
+      const config = {
+        apiKey: apiKey || 'AIzaSy_placeholder',
+        authDomain: `${projectId}.firebaseapp.com`,
+        projectId: projectId,
+        storageBucket: `${projectId}.appspot.com`,
+        databaseURL: dbUrl || `https://${projectId}-default-rtdb.firebaseio.com`
+      };
+
+      localStorage.setItem('facility_firebase_config', JSON.stringify(config));
+      showToast('Firebase settings saved. Initializing cloud sync...');
+      closeFirebaseModal();
+      initFirebaseCloud();
+    }
 
     function renderAllSections(data) {
       if (!data) return;
@@ -1989,7 +2165,6 @@
         return true;
       });
 
-      // Sort
       if (STATE.bd.sortCol) {
         const col = STATE.bd.sortCol;
         const dir = STATE.bd.sortDir === 'asc' ? 1 : -1;
