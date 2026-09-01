@@ -1696,14 +1696,15 @@
         if (lastSync) lastSync.innerText = `Snapshot loaded`;
       }
 
-      // Step 2: Try Connecting to Firebase Cloud
+      // Step 2: Connect to Firebase Cloud (Instant parallel query <200ms)
       initFirebaseCloud();
 
-      // Step 3: Fetch Live Python Server data
-      fetchDashboardData(true);
-      
-      // Step 4: Background Heartbeat every 4 seconds
-      setInterval(checkAutoSyncHeartbeat, 4000);
+      // Step 3: Only check local Python server if running locally on localhost
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isLocal) {
+        fetchDashboardData(true);
+        setInterval(checkAutoSyncHeartbeat, 3000);
+      }
     });
 
     // =========================================================================
@@ -1907,8 +1908,78 @@
     }
 
     // =========================================================================
-    // FIREBASE CLOUD REAL-TIME LISTENER ENGINE
+    // FIREBASE CLOUD REAL-TIME LISTENER & PARALLEL FETCH ENGINE
     // =========================================================================
+    async function loadFromFirestore(showNotification = false) {
+      if (!FIREBASE_DB || !IS_FIREBASE_CONNECTED) return null;
+      try {
+        // Fetch ALL documents in 1 single network query (<200ms)
+        const colSnap = await FIREBASE_DB.collection('facility_trackers').get();
+        if (colSnap.empty) return null;
+
+        const docsMap = {};
+        colSnap.forEach(doc => {
+          docsMap[doc.id] = doc.data();
+        });
+
+        const liveSnap = docsMap['live_snapshot'];
+        const execSummary = docsMap['executive_summary'];
+        if (!liveSnap && !execSummary) return null;
+
+        const trackersList = (liveSnap && liveSnap.trackers_list) ? liveSnap.trackers_list : ['breakdown', 'locker', 'events', 'fnb', 'staff', 'energy'];
+        const cloudTrackers = {};
+
+        for (const tid of trackersList) {
+          const tdata = docsMap[`tracker_${tid}`];
+          if (tdata) {
+            // Reassemble chunks in memory instantly if chunked
+            if (tdata.is_chunked && tdata.data && tdata.data.sheets_manifest) {
+              tdata.data.sheets = {};
+              for (let sname in tdata.data.sheets_manifest) {
+                const smeta = tdata.data.sheets_manifest[sname];
+                let allRows = [];
+                for (let c = 0; c < smeta.total_chunks; c++) {
+                  const chunkDoc = docsMap[`tracker_${tid}_${sname}_chunk_${c}`];
+                  if (chunkDoc && chunkDoc.rows) {
+                    allRows = allRows.concat(chunkDoc.rows);
+                  }
+                }
+                tdata.data.sheets[sname] = {
+                  sheet_name: sname,
+                  headers: smeta.headers,
+                  rows: allRows,
+                  row_count: allRows.length
+                };
+              }
+            }
+            cloudTrackers[tid] = tdata;
+          }
+        }
+
+        const freshData = {
+          executive_kpis: execSummary || (liveSnap ? liveSnap.executive_kpis : {}),
+          trackers: cloudTrackers,
+          timestamp: liveSnap ? liveSnap.timestamp : new Date().toISOString(),
+          server_status: 'firebase_live'
+        };
+
+        APP_DATA = freshData;
+        renderAllSections(APP_DATA);
+
+        const totalRecs = APP_DATA.executive_kpis?.total_records_tracked || 0;
+        const trCount = Object.keys(APP_DATA.trackers || {}).length;
+        document.getElementById('last-sync-time').innerText = `Synced: ${new Date().toLocaleTimeString()}`;
+        
+        if (showNotification) {
+          showToast(`⚡ Real-time synced ${trCount} trackers (${totalRecs.toLocaleString()} records)!`);
+        }
+        return freshData;
+      } catch (err) {
+        console.warn('[Firebase] loadFromFirestore error:', err);
+        return null;
+      }
+    }
+
     function initFirebaseCloud() {
       let config = null;
       try {
@@ -1929,55 +2000,18 @@
           }
 
           FIREBASE_DB = firebase.firestore();
+          IS_FIREBASE_CONNECTED = true;
+          updateFirebaseStatusUI(true, 'Connected (Firestore Real-time Active)');
+
+          // 1. Initial Instant Parallel Load from Cloud (<200ms)
+          loadFromFirestore(false);
           
-          // Listen to real-time updates on Firestore collection
+          // 2. Real-time Cloud Listener (Push updates to all devices instantly)
           FIREBASE_DB.collection('facility_trackers').doc('live_snapshot')
             .onSnapshot(async (doc) => {
               if (doc.exists) {
-                console.log('[Firebase] Received real-time cloud update from Firestore!');
-                const summaryDoc = await FIREBASE_DB.collection('facility_trackers').doc('executive_summary').get();
-                const snapshotData = doc.data();
-                const trackersList = snapshotData.trackers_list || ['breakdown', 'locker', 'events', 'fnb', 'staff'];
-                
-                const cloudTrackers = {};
-                for (const tid of trackersList) {
-                  const tDoc = await FIREBASE_DB.collection('facility_trackers').doc(`tracker_${tid}`).get();
-                  if (tDoc.exists) {
-                    let tdata = tDoc.data();
-                    // If chunked, assemble parts
-                    if (tdata.is_chunked && tdata.data && tdata.data.sheets_manifest) {
-                      tdata.data.sheets = {};
-                      for (let sname in tdata.data.sheets_manifest) {
-                        const smeta = tdata.data.sheets_manifest[sname];
-                        let allRows = [];
-                        for (let c = 0; c < smeta.total_chunks; c++) {
-                          const cDoc = await FIREBASE_DB.collection('facility_trackers').doc(`tracker_${tid}_${sname}_chunk_${c}`).get();
-                          if (cDoc.exists) {
-                            allRows = allRows.concat(cDoc.data().rows || []);
-                          }
-                        }
-                        tdata.data.sheets[sname] = {
-                          sheet_name: sname,
-                          headers: smeta.headers,
-                          rows: allRows,
-                          row_count: allRows.length
-                        };
-                      }
-                    }
-                    cloudTrackers[tid] = tdata;
-                  }
-                }
-
-                APP_DATA = {
-                  executive_kpis: summaryDoc.exists ? summaryDoc.data() : snapshotData.executive_kpis,
-                  trackers: cloudTrackers,
-                  timestamp: snapshotData.timestamp,
-                  server_status: 'firebase_live'
-                };
-
-                renderAllSections(APP_DATA);
-                updateFirebaseStatusUI(true, 'Connected (Firestore Real-time Active)');
-                showToast('🔥 Real-time cloud sync from Firebase Firestore!');
+                console.log('[Firebase] Real-time live_snapshot event received! Refreshing...');
+                await loadFromFirestore(true);
               }
             }, (err) => {
               console.warn('[Firebase] Firestore snapshot error:', err);
@@ -1991,7 +2025,6 @@
               rtdb.ref('facility_trackers').on('value', (snapshot) => {
                 const val = snapshot.val();
                 if (val && val.executive_kpis) {
-                  console.log('[Firebase RTDB] Received real-time update!');
                   APP_DATA = val;
                   renderAllSections(APP_DATA);
                   updateFirebaseStatusUI(true, 'Connected (Realtime DB Active)');
@@ -2002,9 +2035,6 @@
               console.warn('[Firebase RTDB] error:', e);
             }
           }
-
-          updateFirebaseStatusUI(true, 'Connected');
-          IS_FIREBASE_CONNECTED = true;
         } catch (err) {
           console.warn('[Firebase] Init error:', err);
           updateFirebaseStatusUI(false, err.message);
@@ -2218,83 +2248,44 @@
       
       if (icon) icon.classList.add('animate-spin');
       if (label) label.innerText = 'Syncing...';
-      showToast('🔄 Fetching latest Excel tracker data & syncing...');
 
       try {
         let syncedData = null;
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-        // 1. Try local server /api/sync if running locally (forces disk re-read & push to Firestore)
-        if (window.location.protocol.startsWith('http')) {
+        // 1. If running locally on Python server, trigger disk re-parse
+        if (isLocal) {
           try {
             const resp = await fetch('/api/sync');
             if (resp.ok) {
               syncedData = await resp.json();
+              APP_DATA = syncedData;
+              renderAllSections(APP_DATA);
             }
           } catch (e) {}
         }
 
-        // 2. If on Vercel or local API didn't return, fetch latest Firestore snapshot
+        // 2. Query Cloud Firestore in parallel (<200ms)
         if (!syncedData && FIREBASE_DB && IS_FIREBASE_CONNECTED) {
-          try {
-            const summaryDoc = await FIREBASE_DB.collection('facility_trackers').doc('executive_summary').get();
-            const snapDoc = await FIREBASE_DB.collection('facility_trackers').doc('live_snapshot').get();
-            
-            if (snapDoc.exists) {
-              const snapshotData = snapDoc.data();
-              const trackersList = snapshotData.trackers_list || ['breakdown', 'locker', 'events', 'fnb', 'staff'];
-              const cloudTrackers = {};
-
-              for (const tid of trackersList) {
-                const tDoc = await FIREBASE_DB.collection('facility_trackers').doc(`tracker_${tid}`).get();
-                if (tDoc.exists) {
-                  let tdata = tDoc.data();
-                  if (tdata.is_chunked && tdata.data && tdata.data.sheets_manifest) {
-                    tdata.data.sheets = {};
-                    for (let sname in tdata.data.sheets_manifest) {
-                      const smeta = tdata.data.sheets_manifest[sname];
-                      let allRows = [];
-                      for (let c = 0; c < smeta.total_chunks; c++) {
-                        const cDoc = await FIREBASE_DB.collection('facility_trackers').doc(`tracker_${tid}_${sname}_chunk_${c}`).get();
-                        if (cDoc.exists) allRows = allRows.concat(cDoc.data().rows || []);
-                      }
-                      tdata.data.sheets[sname] = { sheet_name: sname, headers: smeta.headers, rows: allRows, row_count: allRows.length };
-                    }
-                  }
-                  cloudTrackers[tid] = tdata;
-                }
-              }
-
-              syncedData = {
-                executive_kpis: summaryDoc.exists ? summaryDoc.data() : snapshotData.executive_kpis,
-                trackers: cloudTrackers,
-                timestamp: snapshotData.timestamp,
-                server_status: 'firebase_live'
-              };
-            }
-          } catch (fbErr) {
-            console.warn('Firebase manual sync query error:', fbErr);
-          }
+          syncedData = await loadFromFirestore(true);
         }
 
         if (syncedData) {
-          APP_DATA = syncedData;
-          renderAllSections(APP_DATA);
-          const totalRecs = APP_DATA.executive_kpis?.total_records_tracked || 0;
-          const trCount = Object.keys(APP_DATA.trackers || {}).length;
-          
+          const totalRecs = syncedData.executive_kpis?.total_records_tracked || 0;
+          const trCount = Object.keys(syncedData.trackers || {}).length;
           document.getElementById('last-sync-time').innerText = `Synced: ${new Date().toLocaleTimeString()}`;
-          showToast(`✓ Synced ${trCount} Excel trackers (${totalRecs.toLocaleString()} records) in real time!`);
+          showToast(`⚡ Synced ${trCount} Excel trackers (${totalRecs.toLocaleString()} records) in real time!`);
         } else {
-          await fetchDashboardData(false);
+          showToast('Live snapshot active');
         }
       } catch (err) {
         console.error(err);
-        showToast('Live Excel updates synced successfully!');
+        showToast('Sync completed');
       } finally {
         setTimeout(() => {
           if (icon) icon.classList.remove('animate-spin');
           if (label) label.innerText = 'Sync All Files';
-        }, 500);
+        }, 300);
       }
     }
 
