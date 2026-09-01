@@ -30,3 +30,10 @@ test_*.xlsx
 test_*.xlsm
 temp_built.xlsx
 Book1.xlsx
+
+# Firebase Private Keys
+serviceAccountKey.json
+*serviceAccount*.json
+*.pem
+*.key
+
