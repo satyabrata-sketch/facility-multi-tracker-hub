@@ -12,24 +12,50 @@ ENGINE = TrackerEngine(WORKSPACE_ROOT)
 
 def load_local_payload():
     """Extract full consolidated dataset from all Excel files via non-locking binary stream."""
-    return ENGINE.get_full_payload()
+    payload = ENGINE.get_full_payload()
+    # Also keep data.js updated
+    try:
+        data_js_path = os.path.join(WORKSPACE_ROOT, "data.js")
+        with open(data_js_path, "w", encoding="utf-8") as f:
+            f.write("window.EMBEDDED_TRACKER_DATA = " + json.dumps(payload, ensure_ascii=False) + ";\n")
+    except Exception as e:
+        sys.stderr.write(f"[!] Warning: could not write data.js: {e}\n")
+    return payload
+
+def get_config_from_js():
+    """Try to extract firebase configuration from firebase-config.js if available."""
+    cfg_path = os.path.join(WORKSPACE_ROOT, "firebase-config.js")
+    if os.path.exists(cfg_path):
+        try:
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                import re
+                proj_match = re.search(r'projectId:\s*["\']([^"\']+)["\']', content)
+                db_match = re.search(r'databaseURL:\s*["\']([^"\']+)["\']', content)
+                return {
+                    "projectId": proj_match.group(1) if proj_match else None,
+                    "databaseURL": db_match.group(1) if db_match else None
+                }
+        except Exception:
+            pass
+    return {}
 
 def sync_via_firebase_admin(payload: dict, cred_path: str = "serviceAccountKey.json"):
     """
     Sync payload directly to Firebase Cloud Firestore using firebase-admin SDK.
-    Stores data under collection 'facility_trackers', document 'live_data'.
+    Handles large datasets by chunking sheets if needed.
     """
     try:
         import firebase_admin
         from firebase_admin import credentials, firestore
 
-        if not os.path.exists(cred_path):
-            print(f"[!] Service account key file not found at: {cred_path}")
-            print("[*] Falling back to REST API or local storage.")
+        cred_full_path = os.path.join(WORKSPACE_ROOT, cred_path) if not os.path.isabs(cred_path) else cred_path
+        if not os.path.exists(cred_full_path):
+            print(f"[!] Service account key file not found at: {cred_full_path}")
             return False
 
         if not firebase_admin._apps:
-            cred = credentials.Certificate(cred_path)
+            cred = credentials.Certificate(cred_full_path)
             firebase_admin.initialize_app(cred)
 
         db = firestore.client()
@@ -37,11 +63,58 @@ def sync_via_firebase_admin(payload: dict, cred_path: str = "serviceAccountKey.j
         # 1. Update live executive summary document
         db.collection("facility_trackers").document("executive_summary").set(payload["executive_kpis"])
         
-        # 2. Update each tracker document individually for fast querying
+        # 2. Update each tracker document individually (with chunking for large datasets)
         for tid, tdata in payload["trackers"].items():
-            db.collection("facility_trackers").document(f"tracker_{tid}").set(tdata)
+            if tdata.get("status") != "ok":
+                db.collection("facility_trackers").document(f"tracker_{tid}").set(tdata)
+                continue
 
-        # 3. Save full snapshot
+            raw_bytes = len(json.dumps(tdata, ensure_ascii=False).encode("utf-8"))
+            # If smaller than 600 KB, save directly
+            if raw_bytes < 600 * 1024:
+                db.collection("facility_trackers").document(f"tracker_{tid}").set(tdata)
+            else:
+                # Chunk sheets to guarantee safety under Firestore's 1MB limit
+                sheets = tdata.get("data", {}).get("sheets", {})
+                chunked_tdata = {
+                    "meta": tdata.get("meta", {}),
+                    "record_count": tdata.get("record_count", 0),
+                    "open_count": tdata.get("open_count", 0),
+                    "status": "ok",
+                    "is_chunked": True,
+                    "data": {
+                        "analytics": tdata.get("data", {}).get("analytics", {}),
+                        "sheets_manifest": {}
+                    }
+                }
+
+                for sname, sdata in sheets.items():
+                    headers = sdata.get("headers", [])
+                    rows = sdata.get("rows", [])
+                    chunk_size = 350
+                    total_chunks = (len(rows) + chunk_size - 1) // chunk_size if rows else 1
+
+                    chunked_tdata["data"]["sheets_manifest"][sname] = {
+                        "headers": headers,
+                        "total_rows": len(rows),
+                        "total_chunks": total_chunks
+                    }
+
+                    for c_idx in range(total_chunks):
+                        start = c_idx * chunk_size
+                        end = min(start + chunk_size, len(rows))
+                        chunk_rows = rows[start:end]
+                        chunk_doc_id = f"tracker_{tid}_{sname}_chunk_{c_idx}"
+                        db.collection("facility_trackers").document(chunk_doc_id).set({
+                            "tracker_id": tid,
+                            "sheet_name": sname,
+                            "chunk_index": c_idx,
+                            "rows": chunk_rows
+                        })
+
+                db.collection("facility_trackers").document(f"tracker_{tid}").set(chunked_tdata)
+
+        # 3. Save full snapshot manifest to trigger real-time listener on all clients
         db.collection("facility_trackers").document("live_snapshot").set({
             "timestamp": payload["timestamp"],
             "executive_kpis": payload["executive_kpis"],
@@ -58,10 +131,8 @@ def sync_via_firebase_admin(payload: dict, cred_path: str = "serviceAccountKey.j
 def sync_via_firebase_rest(payload: dict, database_url: str, auth_secret: str = None):
     """
     Sync payload to Firebase Realtime Database via standard HTTPS REST API.
-    Works without needing complex local service account files.
     """
-    if not database_url:
-        print("[!] No Firebase Database URL provided.")
+    if not database_url or "your-project-id" in database_url:
         return False
 
     db_url = database_url.rstrip("/")
@@ -88,17 +159,27 @@ def sync_via_firebase_rest(payload: dict, database_url: str, auth_secret: str = 
         print(f"[ERROR] Firebase REST sync failed: {e}")
         return False
 
-def run_watch_loop(interval_sec: int = 5, cred_path: str = "serviceAccountKey.json", db_url: str = None):
+def run_watch_loop(interval_sec: int = 4, cred_path: str = "serviceAccountKey.json", db_url: str = None):
     """Continuously monitor Excel files and auto-sync to Firebase on change."""
-    print("=" * 65)
-    print("   🔥 Facility Multi-Tracker Firebase Cloud Continuous Sync")
-    print("=" * 65)
+    print("=" * 70)
+    print("   🔥 Facility Multi-Tracker Firebase Cloud Continuous Sync Daemon")
+    print("=" * 70)
     print(f"[*] Workspace Root: {WORKSPACE_ROOT}")
     print(f"[*] Polling interval: {interval_sec}s")
-    print(f"[*] Service Account: {cred_path} (exists: {os.path.exists(cred_path)})")
-    if db_url:
-        print(f"[*] Database URL: {db_url}")
-    print("=" * 65)
+    
+    cred_full_path = os.path.join(WORKSPACE_ROOT, cred_path) if not os.path.isabs(cred_path) else cred_path
+    has_cred = os.path.exists(cred_full_path)
+    print(f"[*] Service Account Key: {cred_path} (Detected: {'YES' if has_cred else 'NO - Place serviceAccountKey.json in this folder'})")
+    
+    if not db_url:
+        js_cfg = get_config_from_js()
+        db_url = js_cfg.get("databaseURL")
+
+    if db_url and "your-project-id" not in db_url:
+        print(f"[*] Realtime DB URL: {db_url}")
+    print("=" * 70)
+    print("[*] Watching folder for newly dropped or updated Excel files (.xlsx / .xlsm)...")
+    print("[*] When you place any Excel tracker file here, it will auto-sync to Firebase.\n")
 
     last_timestamps = {}
 
@@ -106,6 +187,11 @@ def run_watch_loop(interval_sec: int = 5, cred_path: str = "serviceAccountKey.js
         try:
             discovered = ENGINE.scan_all_trackers()
             has_changes = False
+
+            # Check if any new trackers were added or file modified
+            current_paths = {tr["path"] for tr in discovered}
+            if set(last_timestamps.keys()) != current_paths:
+                has_changes = True
 
             for tr in discovered:
                 p = tr["path"]
@@ -115,16 +201,19 @@ def run_watch_loop(interval_sec: int = 5, cred_path: str = "serviceAccountKey.js
                     last_timestamps[p] = mtime
 
             if has_changes:
-                print(f"\n[{time.strftime('%H:%M:%S')}] Detected modification in Excel trackers. Parsing & syncing to Firebase...")
+                print(f"\n[{time.strftime('%H:%M:%S')}] Detected modification/addition in Excel trackers! Parsing & syncing...")
                 payload = load_local_payload()
-                
-                # Try Admin SDK first
-                if os.path.exists(cred_path):
-                    sync_via_firebase_admin(payload, cred_path)
-                elif db_url:
+                rec_count = payload['executive_kpis']['total_records_tracked']
+                tr_count = len(payload['trackers'])
+                print(f"[{time.strftime('%H:%M:%S')}] Parsed {rec_count:,} records across {tr_count} trackers.")
+
+                if os.path.exists(cred_full_path):
+                    sync_via_firebase_admin(payload, cred_full_path)
+                elif db_url and "your-project-id" not in db_url:
                     sync_via_firebase_rest(payload, db_url)
                 else:
-                    print(f"[{time.strftime('%H:%M:%S')}] Parsed {payload['executive_kpis']['total_records_tracked']} records. (Provide serviceAccountKey.json or database URL to push to Cloud)")
+                    print(f"[{time.strftime('%H:%M:%S')}] Local snapshot updated in 'data.js'.")
+                    print("[TIP] To sync live to Firebase Cloud, place 'serviceAccountKey.json' in this folder.")
 
         except KeyboardInterrupt:
             print("\n[*] Firebase sync stopped.")
@@ -146,12 +235,14 @@ if __name__ == "__main__":
     if args.watch:
         run_watch_loop(args.interval, args.cred, args.db_url)
     else:
-        print("[*] Running 1-time Firebase sync...")
+        print("[*] Running 1-time sync...")
         payload = load_local_payload()
-        if os.path.exists(args.cred):
-            sync_via_firebase_admin(payload, args.cred)
-        elif args.db_url:
+        cred_full_path = os.path.join(WORKSPACE_ROOT, args.cred) if not os.path.isabs(args.cred) else args.cred
+        if os.path.exists(cred_full_path):
+            sync_via_firebase_admin(payload, cred_full_path)
+        elif args.db_url and "your-project-id" not in args.db_url:
             sync_via_firebase_rest(payload, args.db_url)
         else:
-            print(f"[INFO] Parsed {payload['executive_kpis']['total_records_tracked']} records from {len(payload['trackers'])} trackers successfully.")
-            print("[TIP] To push to Firebase Cloud, place 'serviceAccountKey.json' in this folder or pass --db-url.")
+            print(f"[INFO] Parsed {payload['executive_kpis']['total_records_tracked']} records from {len(payload['trackers'])} trackers.")
+            print("[INFO] Updated 'data.js' snapshot successfully.")
+            print("[TIP] To push to Firebase Cloud, place 'serviceAccountKey.json' in this folder.")
