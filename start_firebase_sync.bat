@@ -10,6 +10,6 @@ echo [*] Watching Excel files for modifications (non-locking)...
 echo [*] Changes will automatically sync to Firebase Cloud Firestore.
 echo.
 
-python firebase_sync.py --watch --interval 4
+python firebase_sync.py --watch --interval 3
 
 pause
