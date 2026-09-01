@@ -1,19 +1,9 @@
 {
-  "version": 2,
-  "public": true,
   "cleanUrls": true,
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/data",
-      "dest": "/data.js",
-      "headers": {
-        "Content-Type": "application/javascript; charset=utf-8",
-        "Cache-Control": "s-maxage=30, stale-while-revalidate"
-      }
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/$1"
+      "source": "/api/data",
+      "destination": "/data.js"
     }
   ],
   "headers": [
