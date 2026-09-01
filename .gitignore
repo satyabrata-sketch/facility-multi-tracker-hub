@@ -1,0 +1,32 @@
+# Excel Temporary and Lock Files
+~$*.xlsx
+~$*.xlsm
+~$*.xls
+*.tmp
+
+# Python Cache & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+
+# Vercel and Deployment Artifacts
+.vercel/
+.vercel_build_output/
+
+# OS Specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Backups & Test Files
+*_Backup.xlsx
+*_backup.xlsx
+*_Raw_Backup.xlsx
+test_*.xlsx
+test_*.xlsm
+temp_built.xlsx
+Book1.xlsx

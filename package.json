@@ -1,0 +1,23 @@
+{
+  "name": "facility-multi-tracker-hub",
+  "version": "1.0.0",
+  "description": "Facility Multi-Tracker Operations Hub & Real-Time Analytics Portal",
+  "main": "index.html",
+  "scripts": {
+    "start": "python server.py",
+    "sync": "python -c \"from server import get_cached_or_fresh_data; get_cached_or_fresh_data()\"",
+    "deploy": "vercel --prod"
+  },
+  "keywords": [
+    "facility-management",
+    "operations",
+    "excel-sync",
+    "breakdown-tracker",
+    "asset-tracker",
+    "event-tracker",
+    "dashboard",
+    "vercel"
+  ],
+  "author": "CBRE Facility Operations",
+  "license": "MIT"
+}
