@@ -134,6 +134,13 @@
             <span class="hidden sm:inline">Upload Excel</span>
           </button>
 
+          <!-- Download Excel Button -->
+          <button id="btn-download-excel" onclick="downloadCurrentActiveTracker()" title="Download current tracker table as Excel (.xlsx)"
+            class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold shadow-sm shadow-indigo-600/30 transition-all duration-150 cursor-pointer">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Download Excel</span>
+          </button>
+
           <!-- Firebase Cloud Button -->
           <button id="btn-firebase-modal" onclick="openFirebaseModal()" title="Configure Firebase Cloud Backend"
             class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-amber-700 hover:text-amber-800 bg-amber-100/70 hover:bg-amber-100 dark:bg-amber-950/70 dark:hover:bg-amber-950 dark:text-amber-300 text-xs font-semibold border border-amber-300 dark:border-amber-800 transition cursor-pointer">
@@ -2003,18 +2010,64 @@
           IS_FIREBASE_CONNECTED = true;
           updateFirebaseStatusUI(true, 'Connected (Firestore Real-time Active)');
 
-          // 1. Initial Instant Parallel Load from Cloud (<200ms)
-          loadFromFirestore(false);
-          
-          // 2. Real-time Cloud Listener (Push updates to all devices instantly)
-          FIREBASE_DB.collection('facility_trackers').doc('live_snapshot')
-            .onSnapshot(async (doc) => {
-              if (doc.exists) {
-                console.log('[Firebase] Real-time live_snapshot event received! Refreshing...');
-                await loadFromFirestore(true);
+          // 1. Direct Real-time Collection Listener (Push updates to all devices instantly)
+          FIREBASE_DB.collection('facility_trackers')
+            .onSnapshot((querySnapshot) => {
+              if (querySnapshot.empty) return;
+              console.log('[Firebase] Real-time collection snapshot received from Firestore!');
+              
+              const docsMap = {};
+              querySnapshot.forEach(doc => {
+                docsMap[doc.id] = doc.data();
+              });
+
+              const liveSnap = docsMap['live_snapshot'];
+              const execSummary = docsMap['executive_summary'];
+              if (!liveSnap && !execSummary) return;
+
+              const trackersList = (liveSnap && liveSnap.trackers_list) ? liveSnap.trackers_list : Object.keys(docsMap).filter(k => k.startsWith('tracker_')).map(k => k.replace('tracker_', ''));
+              const cloudTrackers = {};
+
+              for (const tid of trackersList) {
+                const tdata = docsMap[`tracker_${tid}`];
+                if (tdata) {
+                  // Reassemble chunks in memory instantly if chunked
+                  if (tdata.is_chunked && tdata.data && tdata.data.sheets_manifest) {
+                    tdata.data.sheets = {};
+                    for (let sname in tdata.data.sheets_manifest) {
+                      const smeta = tdata.data.sheets_manifest[sname];
+                      let allRows = [];
+                      for (let c = 0; c < smeta.total_chunks; c++) {
+                        const chunkDoc = docsMap[`tracker_${tid}_${sname}_chunk_${c}`];
+                        if (chunkDoc && chunkDoc.rows) {
+                          allRows = allRows.concat(chunkDoc.rows);
+                        }
+                      }
+                      tdata.data.sheets[sname] = {
+                        sheet_name: sname,
+                        headers: smeta.headers,
+                        rows: allRows,
+                        row_count: allRows.length
+                      };
+                    }
+                  }
+                  cloudTrackers[tid] = tdata;
+                }
               }
+
+              APP_DATA = {
+                executive_kpis: execSummary || (liveSnap ? liveSnap.executive_kpis : {}),
+                trackers: cloudTrackers,
+                timestamp: liveSnap ? liveSnap.timestamp : new Date().toISOString(),
+                server_status: 'firebase_live'
+              };
+
+              renderAllSections(APP_DATA);
+              updateFirebaseStatusUI(true, 'Connected (Real-time Live)');
+              const totalRecs = APP_DATA.executive_kpis?.total_records_tracked || 0;
+              document.getElementById('last-sync-time').innerText = `Live: ${new Date().toLocaleTimeString()}`;
             }, (err) => {
-              console.warn('[Firebase] Firestore snapshot error:', err);
+              console.warn('[Firebase] Firestore collection snapshot error:', err);
               updateFirebaseStatusUI(false, err.message);
             });
 
@@ -2041,6 +2094,97 @@
         }
       } else {
         updateFirebaseStatusUI(false, 'Not configured (Click to set up)');
+      }
+    }
+
+    // =========================================================================
+    // EXCEL WORKBOOK EXPORT & DOWNLOAD ENGINE
+    // =========================================================================
+    function downloadCurrentActiveTracker() {
+      if (!APP_DATA || !APP_DATA.trackers) {
+        alert('Data is still loading, please wait a moment.');
+        return;
+      }
+
+      if (CURRENT_TAB === 'overview') {
+        downloadAllTrackersWorkbook();
+        return;
+      }
+
+      const tracker = APP_DATA.trackers[CURRENT_TAB];
+      if (!tracker || !tracker.data || !tracker.data.sheets) {
+        showToast('No dataset available to download for this tab.');
+        return;
+      }
+
+      try {
+        const wb = XLSX.utils.book_new();
+        const sheets = tracker.data.sheets;
+        let sheetCount = 0;
+
+        for (let sname in sheets) {
+          const sdata = sheets[sname];
+          const rows = sdata.rows || [];
+          if (rows.length > 0) {
+            const ws = XLSX.utils.json_to_sheet(rows, { header: sdata.headers });
+            XLSX.utils.book_append_sheet(wb, ws, sname.slice(0, 31).replace(/[:\\\/\?\*\[\]]/g, '_'));
+            sheetCount++;
+          }
+        }
+
+        if (sheetCount === 0) {
+          showToast('No records found to export.');
+          return;
+        }
+
+        const safeTitle = (tracker.meta?.title || CURRENT_TAB).replace(/[^a-zA-Z0-9_\- ]/g, '').replace(/\s+/g, '_');
+        const filename = `${safeTitle}_${new Date().toISOString().slice(0,10)}.xlsx`;
+        XLSX.writeFile(wb, filename);
+        showToast(`📥 Downloaded "${filename}" successfully!`);
+      } catch (err) {
+        console.error('Download error:', err);
+        alert('Could not generate Excel file: ' + err.message);
+      }
+    }
+
+    function downloadAllTrackersWorkbook() {
+      if (!APP_DATA || !APP_DATA.trackers) {
+        alert('No data available to download.');
+        return;
+      }
+
+      try {
+        const wb = XLSX.utils.book_new();
+        let totalSheets = 0;
+
+        for (let tid in APP_DATA.trackers) {
+          const tr = APP_DATA.trackers[tid];
+          const sheets = tr.data?.sheets || {};
+          const trTitle = tr.meta?.short_title || tr.meta?.title || tid;
+
+          for (let sname in sheets) {
+            const sdata = sheets[sname];
+            const rows = sdata.rows || [];
+            if (rows.length > 0) {
+              const sheetTabName = `${trTitle}_${sname}`.slice(0, 31).replace(/[:\\\/\?\*\[\]]/g, '_');
+              const ws = XLSX.utils.json_to_sheet(rows, { header: sdata.headers });
+              XLSX.utils.book_append_sheet(wb, ws, sheetTabName);
+              totalSheets++;
+            }
+          }
+        }
+
+        if (totalSheets === 0) {
+          showToast('No data available in trackers.');
+          return;
+        }
+
+        const filename = `Facility_Multi_Trackers_Master_${new Date().toISOString().slice(0,10)}.xlsx`;
+        XLSX.writeFile(wb, filename);
+        showToast(`📥 Downloaded Master Excel Workbook (${totalSheets} sheets)!`);
+      } catch (err) {
+        console.error('Master export error:', err);
+        alert('Export error: ' + err.message);
       }
     }
 

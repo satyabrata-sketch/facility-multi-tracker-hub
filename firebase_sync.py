@@ -193,10 +193,12 @@ def run_watch_loop(interval_sec: int = 3, cred_path: str = "serviceAccountKey.js
     print("[*] Keep this window open. When you edit any Excel file and press Ctrl+S,")
     print("    it will instantly reflect on your Vercel link worldwide in real time!\n")
 
-    last_timestamps = {}
+    last_fingerprints = {}
     for tr in ENGINE.scan_all_trackers():
         p = tr["path"]
-        last_timestamps[p] = os.path.getmtime(p) if os.path.exists(p) else 0
+        mtime = os.path.getmtime(p) if os.path.exists(p) else 0
+        h = tr.get("meta", {}).get("hash", "")
+        last_fingerprints[p] = f"{mtime}_{h}"
 
     while True:
         try:
@@ -206,14 +208,16 @@ def run_watch_loop(interval_sec: int = 3, cred_path: str = "serviceAccountKey.js
             for tr in discovered:
                 p = tr["path"]
                 mtime = os.path.getmtime(p) if os.path.exists(p) else 0
-                if last_timestamps.get(p) != mtime:
-                    last_timestamps[p] = mtime
+                h = tr.get("meta", {}).get("hash", "")
+                fp = f"{mtime}_{h}"
+                if last_fingerprints.get(p) != fp:
+                    last_fingerprints[p] = fp
                     modified_trackers.append(tr)
 
             if modified_trackers:
                 for tr in modified_trackers:
                     rel_p = tr.get("relative_path", os.path.basename(tr["path"]))
-                    print(f"\n[{time.strftime('%H:%M:%S')}] ⚡ Detected modification in: {rel_p}")
+                    print(f"\n[{time.strftime('%H:%M:%S')}] ⚡ Excel change detected: {rel_p}")
                 
                 # Re-parse and push
                 cached_payload = load_local_payload()
