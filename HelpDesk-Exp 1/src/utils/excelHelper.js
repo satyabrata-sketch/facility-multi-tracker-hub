@@ -474,7 +474,7 @@ export function parseSheetToTickets(workbook, selectedSheetName, existingTickets
     if (!ticket['Sr no.']) {
       ticket['Sr no.'] = String(index + 1);
     }
-    ticket.id = `sr-${ticket.year || '2026'}-${index + 1}`;
+    ticket.id = ticket.id || `import-${ticket.year || '2026'}-${Date.now().toString(36)}-${index + 1}`;
 
     // Deduplication check: deterministic unique signature
     const dedupKey = getTicketUniqueKey(ticket);

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   ResponsiveContainer,
   PieChart,
@@ -42,6 +42,7 @@ import {
   ShieldAlert,
   ChevronRight,
   ListFilter,
+  Eye,
 } from 'lucide-react';
 import { detectTicketYear, compareMonthsChronologically, VALID_REQUEST_CATEGORIES } from '../utils/schema';
 
@@ -96,13 +97,6 @@ export default function AnalyticsDashboard({
     }
   };
 
-  // Helper to trigger interactive drilldown to Tracker Grid
-  const handleDrilldown = (filterObj) => {
-    if (typeof onDrilldownToTracker === 'function') {
-      onDrilldownToTracker(filterObj);
-    }
-  };
-
   // Filter States
   const [siteFilter, setSiteFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -110,6 +104,119 @@ export default function AnalyticsDashboard({
   const [requestViaFilter, setRequestViaFilter] = useState('all');
   const [monthFilter, setMonthFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  const activeFilterCount = [
+    siteFilter !== 'all',
+    categoryFilter !== 'all',
+    callTypeFilter !== 'all',
+    requestViaFilter !== 'all',
+    monthFilter !== 'all',
+    statusFilter !== 'all',
+  ].filter(Boolean).length;
+
+  const resetFilters = () => {
+    setSiteFilter('all');
+    setCategoryFilter('all');
+    setCallTypeFilter('all');
+    setRequestViaFilter('all');
+    setMonthFilter('all');
+    setStatusFilter('all');
+  };
+
+  // Helper to trigger interactive drilldown to Tracker Grid with all active dashboard filters preserved
+  const handleDrilldown = useCallback(
+    (incoming = {}) => {
+      if (typeof onDrilldownToTracker !== 'function') return;
+
+      // Build base filter state from active dashboard dropdowns
+      const filters = {
+        year: activeYear,
+      };
+      if (siteFilter !== 'all') filters.site = siteFilter;
+      if (categoryFilter !== 'all') filters.category = categoryFilter;
+      if (callTypeFilter !== 'all') filters.callType = callTypeFilter;
+      if (requestViaFilter !== 'all') filters.requestVia = requestViaFilter;
+      if (monthFilter !== 'all') filters.month = monthFilter;
+      if (statusFilter !== 'all') filters.status = statusFilter;
+
+      // Merge explicit filter payload if provided
+      if (incoming.filters) {
+        Object.assign(filters, incoming.filters);
+      }
+
+      // Process specific incoming drilldown type
+      const type = incoming.type || 'all';
+      const value = incoming.value;
+
+      if (type === 'pending') {
+        filters.isPending = true;
+      } else if (type === 'callType' && value) {
+        filters.callType = value;
+      } else if (type === 'status' && value) {
+        filters.status = value;
+      } else if (type === 'tat') {
+        filters.tat = value === 'No' || value === 'breached' ? 'breached' : 'compliant';
+      } else if (type === 'category' && value) {
+        filters.category = value;
+      } else if (type === 'site' && value) {
+        filters.site = value;
+      } else if (type === 'channel' && value) {
+        filters.requestVia = value;
+      } else if (type === 'month' && value) {
+        filters.month = value;
+      } else if (type === 'priority' && value) {
+        filters.priority = value;
+      } else if (type === 'raiser' && value) {
+        filters.engineer = value;
+      } else if (type === 'siteAndType' && value) {
+        if (value.site) filters.site = value.site;
+        if (value.callType) filters.callType = value.callType;
+      } else if (type === 'ticketId') {
+        // Individual ticket drilldown opens directly
+        onDrilldownToTracker({
+          type: 'ticketId',
+          value: value,
+          label: incoming.label || `Ticket #${value}`,
+        });
+        return;
+      }
+
+      // Build descriptive human-readable label
+      const parts = [];
+      if (filters.category) parts.push(`Category: ${filters.category}`);
+      if (filters.site) parts.push(`Site: ${filters.site}`);
+      if (filters.month) parts.push(`Month: ${filters.month}`);
+      if (filters.callType) parts.push(`Call: ${filters.callType}`);
+      if (filters.requestVia) parts.push(`Via: ${filters.requestVia}`);
+      if (filters.status) parts.push(`Status: ${filters.status}`);
+      if (filters.isPending) parts.push(`Pending`);
+      if (filters.tat) parts.push(filters.tat === 'breached' ? 'TAT Breached' : 'TAT On-Time');
+      if (filters.priority) parts.push(`Priority: ${filters.priority}`);
+      if (filters.engineer) parts.push(`Raised by: ${filters.engineer}`);
+
+      const yearSuffix = filters.year === 'all' ? 'All Years' : filters.year;
+      const finalLabel =
+        parts.length > 0
+          ? `${parts.join(' • ')} (${yearSuffix})`
+          : incoming.label || `All Tickets (${yearSuffix})`;
+
+      onDrilldownToTracker({
+        type: 'compound',
+        label: finalLabel,
+        filters: filters,
+      });
+    },
+    [
+      activeYear,
+      siteFilter,
+      categoryFilter,
+      callTypeFilter,
+      requestViaFilter,
+      monthFilter,
+      statusFilter,
+      onDrilldownToTracker,
+    ]
+  );
 
   // Year tickets count
   const count2026 = useMemo(() => {
@@ -153,36 +260,39 @@ export default function AnalyticsDashboard({
     return Array.from(set);
   }, [allTickets]);
 
-  const activeFilterCount = [
-    siteFilter !== 'all',
-    categoryFilter !== 'all',
-    callTypeFilter !== 'all',
-    requestViaFilter !== 'all',
-    monthFilter !== 'all',
-    statusFilter !== 'all',
-  ].filter(Boolean).length;
-
-  const resetFilters = () => {
-    setSiteFilter('all');
-    setCategoryFilter('all');
-    setCallTypeFilter('all');
-    setRequestViaFilter('all');
-    setMonthFilter('all');
-    setStatusFilter('all');
-  };
-
   // Filtered dataset with all filter bar constraints
   const filteredDataset = useMemo(() => {
     return yearDataset.filter((t) => {
-      if (siteFilter !== 'all' && (t['Site '] || '').trim() !== siteFilter) return false;
-      if (categoryFilter !== 'all' && (t['Request category'] || '').trim() !== categoryFilter)
+      if (
+        siteFilter !== 'all' &&
+        (t['Site '] || '').trim().toLowerCase() !== siteFilter.trim().toLowerCase()
+      )
         return false;
-      if (callTypeFilter !== 'all' && (t['Call type'] || '').trim() !== callTypeFilter)
+      if (
+        categoryFilter !== 'all' &&
+        (t['Request category'] || '').trim().toLowerCase() !== categoryFilter.trim().toLowerCase()
+      )
         return false;
-      if (requestViaFilter !== 'all' && (t['Request Via '] || '').trim() !== requestViaFilter)
+      if (
+        callTypeFilter !== 'all' &&
+        (t['Call type'] || '').trim().toLowerCase() !== callTypeFilter.trim().toLowerCase()
+      )
         return false;
-      if (monthFilter !== 'all' && (t['Month '] || '').trim() !== monthFilter) return false;
-      if (statusFilter !== 'all' && (t['Status '] || '').trim() !== statusFilter) return false;
+      if (
+        requestViaFilter !== 'all' &&
+        (t['Request Via '] || '').trim().toLowerCase() !== requestViaFilter.trim().toLowerCase()
+      )
+        return false;
+      if (
+        monthFilter !== 'all' &&
+        (t['Month '] || '').trim().toLowerCase() !== monthFilter.trim().toLowerCase()
+      )
+        return false;
+      if (
+        statusFilter !== 'all' &&
+        (t['Status '] || '').trim().toLowerCase() !== statusFilter.trim().toLowerCase()
+      )
+        return false;
       return true;
     });
   }, [
@@ -767,15 +877,30 @@ export default function AnalyticsDashboard({
               )}
             </div>
 
-            {activeFilterCount > 0 && (
-              <button
-                onClick={resetFilters}
-                className="text-xs text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1"
-              >
-                <RotateCcw className="w-3 h-3" />
-                Reset Filters
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleDrilldown({ type: 'all' })}
+                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                  title="Open filtered tickets directly in Tracker Grid"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>View {filteredDataset.length} in Grid</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+
+              {activeFilterCount > 0 && (
+                <button
+                  onClick={resetFilters}
+                  className="text-xs text-slate-400 hover:text-rose-400 font-medium flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-700/60 hover:border-rose-500/50 transition cursor-pointer"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Reset Filters
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
@@ -896,9 +1021,9 @@ export default function AnalyticsDashboard({
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {/* Card 1: Total Tickets */}
           <div
-            onClick={() => handleDrilldown({ type: 'all', value: 'all', label: `All Tickets (${activeYear})` })}
+            onClick={() => handleDrilldown({ type: 'all', label: `Total Volume (${activeYear})` })}
             className="bg-slate-800/90 rounded-2xl p-4 border border-slate-700 shadow-sm cursor-pointer hover:border-indigo-500 hover:bg-slate-800 transition group"
-            title="Click to view all tickets in Tracker Grid"
+            title="Click to view all filtered tickets in Tracker Grid"
           >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
@@ -922,12 +1047,11 @@ export default function AnalyticsDashboard({
             onClick={() =>
               handleDrilldown({
                 type: 'pending',
-                value: ['Open', 'Not Resolved', 'In-Progress'],
-                label: `Pending / Unresolved Requests (${activeYear})`,
+                label: `Pending Requests (${activeYear})`,
               })
             }
             className="bg-gradient-to-br from-rose-950/60 to-slate-800/90 rounded-2xl p-4 border-2 border-rose-500/50 shadow-sm cursor-pointer hover:border-rose-400 hover:shadow-rose-900/20 transition group"
-            title="Click to view all Pending tickets in Tracker Grid"
+            title="Click to view Pending tickets in Tracker Grid"
           >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-rose-300 uppercase tracking-wider flex items-center gap-1">
@@ -956,7 +1080,7 @@ export default function AnalyticsDashboard({
               handleDrilldown({
                 type: 'callType',
                 value: 'Reactive',
-                label: 'Call Type: Reactive Complaints',
+                label: 'Reactive Complaints',
               })
             }
             className="bg-slate-800/90 rounded-2xl p-4 border border-slate-700 shadow-sm cursor-pointer hover:border-amber-500 transition group"
@@ -986,7 +1110,7 @@ export default function AnalyticsDashboard({
               handleDrilldown({
                 type: 'callType',
                 value: 'Proactive',
-                label: 'Call Type: Proactive Walkthroughs',
+                label: 'Proactive Walkthroughs',
               })
             }
             className="bg-slate-800/90 rounded-2xl p-4 border border-slate-700 shadow-sm cursor-pointer hover:border-emerald-500 transition group"
@@ -1016,7 +1140,7 @@ export default function AnalyticsDashboard({
               handleDrilldown({
                 type: 'status',
                 value: 'Resolved',
-                label: 'Status: Resolved Tickets',
+                label: 'Resolved Tickets',
               })
             }
             className="bg-slate-800/90 rounded-2xl p-4 border border-slate-700 shadow-sm cursor-pointer hover:border-emerald-500 transition group"
@@ -1106,11 +1230,10 @@ export default function AnalyticsDashboard({
               onClick={() =>
                 handleDrilldown({
                   type: 'pending',
-                  value: ['Open', 'Not Resolved', 'In-Progress'],
                   label: 'Pending Requests Backlog',
                 })
               }
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl shadow-md transition flex items-center gap-2 self-start sm:self-auto"
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl shadow-md transition flex items-center gap-2 self-start sm:self-auto cursor-pointer"
             >
               <span>View All {pendingAnalytics.total} Pending in Tracker</span>
               <ArrowRight className="w-4 h-4" />
@@ -1150,8 +1273,8 @@ export default function AnalyticsDashboard({
                         radius={[6, 6, 0, 0]}
                         onClick={(entry) =>
                           handleDrilldown({
-                            type: 'category',
-                            value: entry.name,
+                            type: 'compound',
+                            filters: { category: entry.name, isPending: true },
                             label: `Pending Category: ${entry.name}`,
                           })
                         }
@@ -1186,8 +1309,8 @@ export default function AnalyticsDashboard({
                     key={idx}
                     onClick={() =>
                       handleDrilldown({
-                        type: 'site',
-                        value: item.name,
+                        type: 'compound',
+                        filters: { site: item.name, isPending: true },
                         label: `Pending at Site: ${item.name}`,
                       })
                     }

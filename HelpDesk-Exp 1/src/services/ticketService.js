@@ -217,6 +217,9 @@ if (typeof window !== 'undefined') {
  * Real-time subscription to tickets collection with zero-latency cache-first delivery
  */
 export function subscribeTickets(onSuccess, onError) {
+  // Always register in localListeners so local updates and batch imports trigger instant React UI update!
+  localListeners.push(onSuccess);
+
   // 1. Immediately emit in-memory or sample tickets so UI NEVER displays 0 while loading!
   if (localTickets && localTickets.length > 0) {
     onSuccess([...localTickets]);
@@ -232,6 +235,7 @@ export function subscribeTickets(onSuccess, onError) {
     }
   });
 
+  let channel = null;
   if (isSupabaseConfigValid && supabase) {
     (async () => {
       try {
@@ -252,7 +256,7 @@ export function subscribeTickets(onSuccess, onError) {
             });
           localTickets = sanitized;
           setCachedTicketsIDB(sanitized);
-          onSuccess(sanitized);
+          notifyLocalListeners();
         } else {
           // If Supabase table is empty, seed with full dataset
           onSuccess([...sampleTickets]);
@@ -263,7 +267,7 @@ export function subscribeTickets(onSuccess, onError) {
       }
     })();
 
-    const channel = supabase
+    channel = supabase
       .channel('tickets-realtime')
       .on(
         'postgres_changes',
@@ -273,21 +277,18 @@ export function subscribeTickets(onSuccess, onError) {
           if (data && data.length > 0) {
             localTickets = data;
             setCachedTicketsIDB(data);
-            onSuccess(data);
+            notifyLocalListeners();
           }
         }
       )
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }
 
+  let firestoreUnsubscribe = null;
   if (isConfigValid && db) {
     try {
       const q = collection(db, COLLECTION_NAME);
-      const unsubscribe = onSnapshot(
+      firestoreUnsubscribe = onSnapshot(
         q,
         (snapshot) => {
           if (!snapshot.empty) {
@@ -317,29 +318,64 @@ export function subscribeTickets(onSuccess, onError) {
             if (tickets.length > 0) {
               localTickets = tickets;
               setCachedTicketsIDB(tickets);
-              onSuccess(tickets);
+              notifyLocalListeners();
             }
           }
         },
         (error) => {
           console.error('Firestore subscription error:', error);
           if (onError) onError(error);
-          onSuccess([...localTickets]);
+          notifyLocalListeners();
         }
       );
-      return unsubscribe;
     } catch (err) {
       console.error('Failed to create Firestore query:', err);
-      onSuccess([...localTickets]);
-      return () => {};
     }
   }
 
-  // Demo mode: local listener
-  localListeners.push(onSuccess);
   return () => {
     localListeners = localListeners.filter((l) => l !== onSuccess);
+    if (channel && supabase) {
+      supabase.removeChannel(channel);
+    }
+    if (firestoreUnsubscribe) {
+      firestoreUnsubscribe();
+    }
   };
+}
+
+/**
+ * Get current in-memory tickets array
+ */
+export function getLocalTickets() {
+  return [...localTickets];
+}
+
+/**
+ * Explicitly refresh tickets from database / cache and notify all listeners
+ */
+export async function refreshTickets() {
+  if (isSupabaseConfigValid && supabase) {
+    try {
+      const data = await fetchAllSupabaseTickets();
+      if (data && data.length > 0) {
+        localTickets = deduplicateTickets(data);
+        setCachedTicketsIDB(localTickets);
+        notifyLocalListeners();
+        return localTickets;
+      }
+    } catch (e) {
+      console.warn('Supabase refresh notice:', e);
+    }
+  }
+  const cached = await getCachedTicketsIDB();
+  if (Array.isArray(cached) && cached.length > 0) {
+    localTickets = cached;
+    notifyLocalListeners();
+    return localTickets;
+  }
+  notifyLocalListeners();
+  return localTickets;
 }
 
 /**
@@ -594,9 +630,11 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
 
   // 1. Build an index of existing tickets by their unique signature
   const existingMap = new Map();
+  const existingIdSet = new Set();
   localTickets.forEach((t) => {
     const k = getTicketUniqueKey(t);
     if (k) existingMap.set(k, t);
+    if (t.id) existingIdSet.add(String(t.id));
   });
 
   // 2. Format & deduplicate incoming tickets: merge with existing if already present
@@ -620,8 +658,13 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
       existingMap.set(k, updated);
       mergedIncoming.push(updated);
     } else {
-      // Brand new ticket: assign stable deterministic ID
-      const stableId = t.id || `sr-${yr}-${sr}`;
+      // Brand new ticket: assign guaranteed unique ID that does NOT collide with any existing ticket
+      let stableId = `sr-${yr}-${sr}`;
+      if (existingIdSet.has(stableId)) {
+        stableId = `sr-${yr}-${sr}-${Date.now().toString(36)}-${idx + 1}`;
+      }
+      existingIdSet.add(stableId);
+
       const created = {
         ...t,
         id: stableId,

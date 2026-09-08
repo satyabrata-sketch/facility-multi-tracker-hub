@@ -162,19 +162,16 @@ export function getTicketUniqueKey(ticket) {
   const sr = String(ticket['Sr no.'] || '').trim();
   const site = String(ticket['Site '] || ticket['Site'] || '').trim().toUpperCase();
   const date = String(ticket['Date '] || ticket['Month '] || '').trim();
+  const time = String(ticket['Report Time'] || '').trim();
   const cat = String(ticket['Request category'] || '').trim().toLowerCase();
+  const emp = String(ticket['Employee Name '] || '').trim().toLowerCase();
   const desc = String(ticket['Discription '] || ticket['Description'] || '')
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ' ');
 
-  // If already assigned a unique id
-  if (ticket.id) {
-    return String(ticket.id);
-  }
-
-  // Combine Sr + Date + Site + Category + partial Desc to ensure separate tickets with reused Sr nos are never dropped!
-  return `${yr}_sr_${sr}_${date}_${site}_${cat}_${desc.slice(0, 30)}`;
+  // Deterministic signature based on real ticket business data:
+  return `${yr}_sr_${sr}_${date}_${time}_${site}_${cat}_${emp.slice(0, 20)}_${desc.slice(0, 40)}`;
 }
 
 /**

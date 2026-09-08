@@ -18,6 +18,7 @@ import {
   deleteTicket,
   bulkDeleteTickets,
   bulkUpdateStatus,
+  refreshTickets,
 } from './services/ticketService';
 import { subscribeAuth, logoutUser } from './firebase/authService';
 import {
@@ -151,6 +152,73 @@ export default function App() {
 
       if (!activeVisualFilter) return true;
 
+      // 1. Compound filter support (preserves all dashboard dropdowns + KPI / chart drilldowns)
+      if (activeVisualFilter.type === 'compound' || activeVisualFilter.filters) {
+        const f = activeVisualFilter.filters || {};
+
+        if (f.year && f.year !== 'all') {
+          const yr = detectTicketYear(t);
+          if (yr !== f.year) return false;
+        }
+
+        if (f.site && f.site !== 'all') {
+          const s = (t['Site '] || '').trim().toLowerCase();
+          if (s !== f.site.trim().toLowerCase()) return false;
+        }
+
+        if (f.category && f.category !== 'all') {
+          const c = (t['Request category'] || '').trim().toLowerCase();
+          if (c !== f.category.trim().toLowerCase()) return false;
+        }
+
+        if (f.callType && f.callType !== 'all') {
+          const ct = (t['Call type'] || '').trim().toLowerCase();
+          if (ct !== f.callType.trim().toLowerCase()) return false;
+        }
+
+        if (f.requestVia && f.requestVia !== 'all') {
+          const rv = (t['Request Via '] || '').trim().toLowerCase();
+          if (rv !== f.requestVia.trim().toLowerCase()) return false;
+        }
+
+        if (f.month && f.month !== 'all') {
+          const m = (t['Month '] || '').trim().toLowerCase();
+          if (m !== f.month.trim().toLowerCase()) return false;
+        }
+
+        if (f.status && f.status !== 'all') {
+          const st = (t['Status '] || '').trim().toLowerCase();
+          if (st !== f.status.trim().toLowerCase()) return false;
+        }
+
+        if (f.isPending) {
+          const st = (t['Status '] || 'Open').trim().toLowerCase();
+          if (st === 'resolved' || st === 'closed') return false;
+        }
+
+        if (f.tat) {
+          const tat = String(t['is On TAT'] || 'Yes').trim().toLowerCase();
+          if (f.tat === 'breached' || f.tat === 'No' || f.tat === 'no') {
+            if (tat !== 'no' && tat !== '0') return false;
+          } else {
+            if (tat !== 'yes' && tat !== '1') return false;
+          }
+        }
+
+        if (f.priority && f.priority !== 'all') {
+          const p = (t['Priority'] || 'Medium').trim().toLowerCase();
+          if (p !== f.priority.trim().toLowerCase()) return false;
+        }
+
+        if (f.engineer && f.engineer !== 'all') {
+          const eng = (t['Employee Name '] || '').trim().toLowerCase();
+          if (!eng.includes(f.engineer.trim().toLowerCase())) return false;
+        }
+
+        return true;
+      }
+
+      // 2. Legacy single-filter handlers
       const { type, value } = activeVisualFilter;
 
       if (type === 'pending') {
@@ -192,7 +260,6 @@ export default function App() {
         return t.id === value || String(t['Sr no.']) === String(value);
       }
       if (type === 'siteAndType') {
-        // value: { site, callType }
         const sMatch = (t['Site '] || '').trim().toLowerCase() === String(value.site).trim().toLowerCase();
         const cMatch = (t['Call type'] || '').trim().toLowerCase() === String(value.callType).trim().toLowerCase();
         return sMatch && cMatch;
@@ -397,6 +464,11 @@ export default function App() {
 
   // Drill down grid to any visual filter (category, site, pending, channel, etc.)
   const handleDrilldownFromVisual = (filterObj) => {
+    if (filterObj?.filters?.year && filterObj.filters.year !== 'all') {
+      setSelectedYear(filterObj.filters.year);
+    } else if (filterObj?.year && filterObj.year !== 'all') {
+      setSelectedYear(filterObj.year);
+    }
     setActiveVisualFilter(filterObj);
     setActiveTab('tracker'); // Switch to Tracker Grid view to inspect tickets immediately
   };
@@ -576,9 +648,12 @@ export default function App() {
         <ImportModal
           isOpen={importModalOpen}
           onClose={() => setImportModalOpen(false)}
-          onImportComplete={() => {
-            setSelectedYear('all');
+          onImportComplete={async () => {
             setActiveVisualFilter(null);
+            const latest = await refreshTickets();
+            if (latest && latest.length > 0) {
+              setTickets(latest);
+            }
           }}
           userEmail={user ? user.email : 'importer@cbre.com'}
           existingTickets={tickets}
