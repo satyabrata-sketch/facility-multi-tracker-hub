@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // CBRE Helpdesk Tickets Collection
+    match /tickets/{ticketId} {
+      // Allows read, create, update, delete for tracker operations
+      // Recommended for team intranet or internal tracker apps:
+      allow read, write: if true;
+      
+      // OPTIONAL: If you want to require user sign-in via Firebase Auth, uncomment below:
+      // allow read, write: if request.auth != null;
+    }
+  }
+}

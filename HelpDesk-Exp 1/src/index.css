@@ -1,0 +1,63 @@
+@import 'ag-grid-community/styles/ag-grid.css';
+@import 'ag-grid-community/styles/ag-theme-alpine.css';
+@import 'ag-grid-community/styles/ag-theme-quartz.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom Excel Grid Polish */
+.ag-theme-alpine {
+  --ag-header-background-color: #f1f5f9;
+  --ag-header-foreground-color: #1e293b;
+  --ag-border-color: #cbd5e1;
+  --ag-secondary-border-color: #e2e8f0;
+  --ag-row-hover-color: #f8fafc;
+  --ag-selected-row-background-color: #eff6ff;
+  --ag-font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --ag-font-size: 13px;
+  --ag-grid-size: 6px;
+}
+
+/* Excel Alternating Row Colors */
+.ag-theme-alpine .ag-row-odd {
+  background-color: #fafbfc;
+}
+
+.ag-theme-alpine .ag-row-even {
+  background-color: #ffffff;
+}
+
+/* Frozen columns visual divider */
+.ag-theme-alpine .ag-pinned-left-cols-container {
+  border-right: 2px solid #94a3b8 !important;
+  box-shadow: 2px 0 6px -2px rgba(0, 0, 0, 0.08);
+}
+
+.ag-theme-alpine .ag-pinned-left-header {
+  border-right: 2px solid #94a3b8 !important;
+}
+
+/* Subtle cell editing border like Excel */
+.ag-theme-alpine .ag-cell-focus:not(.ag-cell-range-selected) {
+  border: 2px solid #2563eb !important;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

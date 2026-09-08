@@ -37,3 +37,15 @@ serviceAccountKey.json
 *.pem
 *.key
 
+# Node dependencies and builds
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+dist-ssr/
+**/dist-ssr/
+.env
+**/.env
+**/.env*.local
+.pnp
+.pnp.js
