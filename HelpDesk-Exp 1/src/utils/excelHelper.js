@@ -8,6 +8,8 @@ import {
   VALID_REQUEST_CATEGORIES,
   VALID_FACILITY_SITES,
   getTicketUniqueKey,
+  deduplicateTickets,
+  compareMonthsChronologically,
 } from './schema';
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -306,14 +308,524 @@ function buildWorksheet(workbook, sheetTitle, ticketsList) {
 }
 
 /**
- * Export tickets into separate sheets for 2026 and 2025
+ * Builds the executive "Dashboard" worksheet inside the Excel export
+ * Matching the exact look, metrics, breakdowns, and CBRE/NAB theme of the app
+ */
+export function buildDashboardSheet(workbook, allTickets, selectedYear = 'all') {
+  const targetYear = selectedYear === '2025' ? '2025' : selectedYear === 'all' ? 'all' : '2026';
+  const cleanTickets = deduplicateTickets(allTickets);
+  const dataset = targetYear === 'all'
+    ? cleanTickets
+    : cleanTickets.filter((t) => detectTicketYear(t) === targetYear);
+
+  const ws = workbook.addWorksheet('Dashboard', {
+    views: [{ showGridLines: true }],
+  });
+
+  // Define column widths for optimal viewing
+  ws.columns = [
+    { width: 3 },  // A (Left Margin)
+    { width: 28 }, // B (Category / Site / Month)
+    { width: 16 }, // C
+    { width: 16 }, // D
+    { width: 16 }, // E
+    { width: 16 }, // F
+    { width: 16 }, // G
+    { width: 16 }, // H
+    { width: 20 }, // I
+  ];
+
+  // Colors (CBRE Forest Green & NAB Star Red Theme)
+  const CBRE_DARK_GREEN = 'FF003F2D';
+  const CBRE_EMERALD = 'FF059669';
+  const CBRE_LIGHT_BG = 'FFE8F5E9';
+  const NAB_RED = 'FFD40026';
+  const NAB_LIGHT_BG = 'FFFFEBEE';
+  const WHITE = 'FFFFFFFF';
+  const SLATE_DARK = 'FF1E293B';
+  const SLATE_BG = 'FFF8FAFC';
+  const BORDER_LIGHT = {
+    top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+  };
+
+  const total = dataset.length;
+  let resolved = 0;
+  let open = 0;
+  let inProgress = 0;
+  let notResolved = 0;
+  let tatBreached = 0;
+  let proactive = 0;
+  let reactive = 0;
+
+  const siteMap = {};
+  VALID_FACILITY_SITES.forEach((s) => {
+    siteMap[s] = { site: s, proactive: 0, reactive: 0, total: 0, resolved: 0, breached: 0 };
+  });
+
+  const catMap = {};
+  VALID_REQUEST_CATEGORIES.forEach((c) => {
+    catMap[c] = { category: c, total: 0, resolved: 0, pending: 0, breached: 0 };
+  });
+
+  const monthMap = {};
+  const channelMap = {
+    'In person': 0,
+    Mail: 0,
+    Phone: 0,
+    'Feedback Form': 0,
+  };
+  const issueCounts = {};
+  const raiserCounts = {};
+
+  dataset.forEach((t) => {
+    const s = String(t['Status '] || 'Open').trim().toLowerCase();
+    const tat = String(t['is On TAT'] || 'Yes').trim().toLowerCase();
+    const call = String(t['Call type'] || '').trim().toLowerCase();
+    const site = sanitizeSiteValue(t['Site '] || t['Site']);
+    const cat = String(t['Request category'] || 'Housekeeping').trim();
+    const month = String(t['Month '] || '').trim();
+    const via = String(t['Request Via '] || 'In person').trim();
+    const desc = String(t['Discription '] || t['Description'] || '').trim();
+    const emp = String(t['Employee Name '] || t['Employee Name'] || '').trim();
+
+    const isResolved = s === 'resolved' || s === 'closed';
+    const isPending = !isResolved;
+    const isBreached = tat === 'no' || tat === '0';
+
+    if (isResolved) resolved++;
+    else if (s === 'in-progress') inProgress++;
+    else if (s === 'not resolved') notResolved++;
+    else open++;
+
+    if (isBreached) tatBreached++;
+    if (call === 'proactive') proactive++;
+    else if (call === 'reactive') reactive++;
+
+    if (!siteMap[site]) {
+      siteMap[site] = { site, proactive: 0, reactive: 0, total: 0, resolved: 0, breached: 0 };
+    }
+    siteMap[site].total++;
+    if (call === 'proactive') siteMap[site].proactive++;
+    else if (call === 'reactive') siteMap[site].reactive++;
+    if (isResolved) siteMap[site].resolved++;
+    if (isBreached) siteMap[site].breached++;
+
+    if (!catMap[cat]) {
+      catMap[cat] = { category: cat, total: 0, resolved: 0, pending: 0, breached: 0 };
+    }
+    catMap[cat].total++;
+    if (isResolved) catMap[cat].resolved++;
+    if (isPending) catMap[cat].pending++;
+    if (isBreached) catMap[cat].breached++;
+
+    if (month) {
+      if (!monthMap[month]) {
+        monthMap[month] = { month, total: 0, reactive: 0, proactive: 0, resolved: 0, breached: 0 };
+      }
+      monthMap[month].total++;
+      if (call === 'reactive') monthMap[month].reactive++;
+      else if (call === 'proactive') monthMap[month].proactive++;
+      if (isResolved) monthMap[month].resolved++;
+      if (isBreached) monthMap[month].breached++;
+    }
+
+    const matchedVia = Object.keys(channelMap).find((k) => k.toLowerCase() === via.toLowerCase()) || 'In person';
+    channelMap[matchedVia] = (channelMap[matchedVia] || 0) + 1;
+
+    if (call === 'reactive' && desc && desc.length > 3) {
+      const cleanDesc = desc.slice(0, 50).trim();
+      issueCounts[cleanDesc] = (issueCounts[cleanDesc] || 0) + 1;
+    }
+
+    if (emp && emp.length > 2) {
+      const cleanEmp = emp.replace(/CBRE|Infra/gi, '').trim() || emp;
+      raiserCounts[cleanEmp] = (raiserCounts[cleanEmp] || 0) + 1;
+    }
+  });
+
+  const pendingTotal = open + inProgress + notResolved;
+  const resolutionRate = total > 0 ? Math.round((resolved / total) * 100) : 0;
+  const tatCompliance = total > 0 ? Math.round(((total - tatBreached) / total) * 100) : 100;
+  const reactiveRate = total > 0 ? Math.round((reactive / total) * 100) : 0;
+  const proactiveRate = total > 0 ? Math.round((proactive / total) * 100) : 0;
+  const periodLabel = targetYear === 'all' ? 'All Multi-Year Records' : `FY ${targetYear === '2025' ? '2024-25 (2025)' : '2025-26 (2026)'}`;
+
+  // 1. Title Banner
+  ws.mergeCells('B2:I2');
+  const titleCell = ws.getCell('B2');
+  titleCell.value = 'CBRE | NAB — FACILITY OPERATIONS & REACTIVE ANALYTICS DASHBOARD';
+  titleCell.font = { name: 'Segoe UI', size: 13, bold: true, color: { argb: WHITE } };
+  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: CBRE_DARK_GREEN } };
+  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  ws.getRow(2).height = 34;
+
+  // Subtitle
+  ws.mergeCells('B3:I3');
+  const subCell = ws.getCell('B3');
+  subCell.value = `Reporting Period: ${periodLabel}  •  Total Volume: ${total.toLocaleString()} Tickets  •  Generated: ${new Date().toLocaleDateString('en-GB')}`;
+  subCell.font = { name: 'Segoe UI', size: 9.5, italic: true, color: { argb: 'FFE2E8F0' } };
+  subCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F2E23' } };
+  subCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  ws.getRow(3).height = 20;
+
+  // Helper for applying borders to merged cells
+  const borderRange = (fromCol, fromRow, toCol, toRow) => {
+    for (let r = fromRow; r <= toRow; r++) {
+      for (let c = fromCol.charCodeAt(0); c <= toCol.charCodeAt(0); c++) {
+        ws.getCell(`${String.fromCharCode(c)}${r}`).border = BORDER_LIGHT;
+      }
+    }
+  };
+
+  // Helper for KPI Card
+  const createCard = (col1, col2, rowTop, label, bigVal, subVal, bgArgb, valColorArgb) => {
+    ws.mergeCells(`${col1}${rowTop}:${col2}${rowTop}`);
+    const lCell = ws.getCell(`${col1}${rowTop}`);
+    lCell.value = label;
+    lCell.font = { name: 'Segoe UI', size: 9, bold: true, color: { argb: 'FF64748B' } };
+    lCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } };
+    lCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    ws.mergeCells(`${col1}${rowTop + 1}:${col2}${rowTop + 1}`);
+    const vCell = ws.getCell(`${col1}${rowTop + 1}`);
+    vCell.value = bigVal;
+    vCell.font = { name: 'Segoe UI', size: 16, bold: true, color: { argb: valColorArgb } };
+    vCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } };
+    vCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    ws.mergeCells(`${col1}${rowTop + 2}:${col2}${rowTop + 2}`);
+    const sCell = ws.getCell(`${col1}${rowTop + 2}`);
+    sCell.value = subVal;
+    sCell.font = { name: 'Segoe UI', size: 8.5, color: { argb: 'FF475569' } };
+    sCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } };
+    sCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    borderRange(col1, rowTop, col2, rowTop + 2);
+    ws.getRow(rowTop).height = 18;
+    ws.getRow(rowTop + 1).height = 26;
+    ws.getRow(rowTop + 2).height = 18;
+  };
+
+  // 2. Executive KPI Cards
+  ws.getCell('B5').value = 'EXECUTIVE OPERATIONS KPIS';
+  ws.getCell('B5').font = { name: 'Segoe UI', size: 10.5, bold: true, color: { argb: CBRE_DARK_GREEN } };
+  ws.getRow(5).height = 20;
+
+  // Row 1 of KPI Cards (Rows 6-8)
+  createCard('B', 'C', 6, 'TOTAL VOLUME', total.toLocaleString(), 'Total Tracked Tickets', CBRE_LIGHT_BG, CBRE_DARK_GREEN);
+  createCard('D', 'E', 6, 'PENDING BACKLOG (NAB ALERT)', `${pendingTotal} (${total > 0 ? Math.round((pendingTotal / total) * 100) : 0}%)`, `Open: ${open} | In-Prog: ${inProgress}`, NAB_LIGHT_BG, NAB_RED);
+  createCard('F', 'G', 6, 'RESOLVED VOLUME', `${resolved.toLocaleString()} (${resolutionRate}%)`, 'Completed Operations', CBRE_LIGHT_BG, CBRE_EMERALD);
+  createCard('H', 'I', 6, 'SLA TAT COMPLIANCE', `${tatCompliance}%`, `${(total - tatBreached).toLocaleString()} On-Time SLA`, CBRE_LIGHT_BG, CBRE_EMERALD);
+
+  // Row 2 of KPI Cards (Rows 10-12)
+  createCard('B', 'C', 10, 'REACTIVE COMPLAINTS', `${reactive.toLocaleString()} (${reactiveRate}%)`, 'Unscheduled Issues', 'FFFFFBEB', 'FFB45309');
+  createCard('D', 'E', 10, 'PROACTIVE WALKTHROUGHS', `${proactive.toLocaleString()} (${proactiveRate}%)`, 'Scheduled Audits', CBRE_LIGHT_BG, CBRE_DARK_GREEN);
+  createCard('F', 'G', 10, 'TAT SLA BREACHES', `${tatBreached.toLocaleString()}`, `${100 - tatCompliance}% SLA Overdue`, NAB_LIGHT_BG, NAB_RED);
+  createCard('H', 'I', 10, 'FACILITY SITES', `${VALID_FACILITY_SITES.length} Locations`, 'DT3, DT4 Floors L1/L4/L5/L6', SLATE_BG, SLATE_DARK);
+
+  let curRow = 14;
+
+  // Helper for Section Headers
+  const renderSectionHeader = (text) => {
+    ws.mergeCells(`B${curRow}:I${curRow}`);
+    const cell = ws.getCell(`B${curRow}`);
+    cell.value = text;
+    cell.font = { name: 'Segoe UI', size: 10.5, bold: true, color: { argb: CBRE_DARK_GREEN } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: CBRE_LIGHT_BG } };
+    cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    borderRange('B', curRow, 'I', curRow);
+    ws.getRow(curRow).height = 24;
+    curRow++;
+  };
+
+  // Helper for Table Headers
+  const renderTableHeader = (cols) => {
+    const row = ws.getRow(curRow);
+    row.height = 22;
+    cols.forEach((col, idx) => {
+      const colLetter = String.fromCharCode('B'.charCodeAt(0) + idx);
+      const cell = ws.getCell(`${colLetter}${curRow}`);
+      cell.value = col.title;
+      cell.font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: WHITE } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: CBRE_DARK_GREEN } };
+      cell.alignment = { vertical: 'middle', horizontal: col.align || 'center' };
+      cell.border = BORDER_LIGHT;
+    });
+    curRow++;
+  };
+
+  // 3. TABLE 1: Facility Site Operations Breakdown
+  renderSectionHeader('1. FACILITY SITE OPERATIONS BREAKDOWN (DT3 & DT4 FLOORS)');
+  renderTableHeader([
+    { title: 'Facility Location', align: 'left' },
+    { title: 'Proactive Calls', align: 'right' },
+    { title: 'Reactive Complaints', align: 'right' },
+    { title: 'Total Volume', align: 'right' },
+    { title: 'Volume Share %', align: 'right' },
+    { title: 'Resolved', align: 'right' },
+    { title: 'TAT Breached', align: 'right' },
+    { title: 'SLA Compliant %', align: 'right' },
+  ]);
+
+  VALID_FACILITY_SITES.forEach((siteKey, idx) => {
+    const s = siteMap[siteKey] || { proactive: 0, reactive: 0, total: 0, resolved: 0, breached: 0 };
+    const share = total > 0 ? (s.total / total) * 100 : 0;
+    const sla = s.total > 0 ? Math.round(((s.total - s.breached) / s.total) * 100) : 100;
+    const bg = idx % 2 === 0 ? WHITE : SLATE_BG;
+
+    const r = ws.getRow(curRow);
+    r.height = 20;
+    const vals = [
+      { v: siteKey, a: 'left', b: true },
+      { v: s.proactive, a: 'right' },
+      { v: s.reactive, a: 'right' },
+      { v: s.total, a: 'right', b: true },
+      { v: `${share.toFixed(1)}%`, a: 'right' },
+      { v: s.resolved, a: 'right' },
+      { v: s.breached, a: 'right', color: s.breached > 0 ? NAB_RED : 'FF64748B' },
+      { v: `${sla}%`, a: 'right', color: sla >= 90 ? CBRE_EMERALD : NAB_RED },
+    ];
+    vals.forEach((item, cIdx) => {
+      const colLetter = String.fromCharCode('B'.charCodeAt(0) + cIdx);
+      const cell = ws.getCell(`${colLetter}${curRow}`);
+      cell.value = item.v;
+      cell.font = { name: 'Segoe UI', size: 9.5, bold: item.b || false, color: { argb: item.color || SLATE_DARK } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+      cell.alignment = { vertical: 'middle', horizontal: item.a };
+      cell.border = BORDER_LIGHT;
+    });
+    curRow++;
+  });
+
+  // Table 1 Grand Total
+  const t1Row = ws.getRow(curRow);
+  t1Row.height = 22;
+  const t1Vals = [
+    { v: 'Grand Total', a: 'left' },
+    { v: proactive, a: 'right' },
+    { v: reactive, a: 'right' },
+    { v: total, a: 'right' },
+    { v: '100.0%', a: 'right' },
+    { v: resolved, a: 'right' },
+    { v: tatBreached, a: 'right' },
+    { v: `${tatCompliance}%`, a: 'right' },
+  ];
+  t1Vals.forEach((item, cIdx) => {
+    const colLetter = String.fromCharCode('B'.charCodeAt(0) + cIdx);
+    const cell = ws.getCell(`${colLetter}${curRow}`);
+    cell.value = item.v;
+    cell.font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: CBRE_DARK_GREEN } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+    cell.alignment = { vertical: 'middle', horizontal: item.a };
+    cell.border = BORDER_LIGHT;
+  });
+  curRow += 2;
+
+  // 4. TABLE 2: Request Category Breakdown
+  renderSectionHeader('2. REQUEST CATEGORY BREAKDOWN');
+  renderTableHeader([
+    { title: 'Request Category', align: 'left' },
+    { title: 'Total Volume', align: 'right' },
+    { title: 'Category Share %', align: 'right' },
+    { title: 'Resolved Requests', align: 'right' },
+    { title: 'Pending Requests', align: 'right' },
+    { title: 'TAT Breached', align: 'right' },
+    { title: 'SLA Compliance %', align: 'right' },
+    { title: 'Operational Status', align: 'center' },
+  ]);
+
+  const sortedCats = Object.values(catMap).sort((a, b) => b.total - a.total);
+  sortedCats.forEach((c, idx) => {
+    const share = total > 0 ? (c.total / total) * 100 : 0;
+    const sla = c.total > 0 ? Math.round(((c.total - c.breached) / c.total) * 100) : 100;
+    const bg = idx % 2 === 0 ? WHITE : SLATE_BG;
+
+    const r = ws.getRow(curRow);
+    r.height = 20;
+    const vals = [
+      { v: c.category, a: 'left', b: true },
+      { v: c.total, a: 'right', b: true },
+      { v: `${share.toFixed(1)}%`, a: 'right' },
+      { v: c.resolved, a: 'right' },
+      { v: c.pending, a: 'right', color: c.pending > 0 ? NAB_RED : 'FF64748B' },
+      { v: c.breached, a: 'right', color: c.breached > 0 ? NAB_RED : 'FF64748B' },
+      { v: `${sla}%`, a: 'right', color: sla >= 90 ? CBRE_EMERALD : NAB_RED },
+      { v: sla >= 95 ? 'Compliant' : sla >= 80 ? 'Within SLA' : 'Needs Review', a: 'center' },
+    ];
+    vals.forEach((item, cIdx) => {
+      const colLetter = String.fromCharCode('B'.charCodeAt(0) + cIdx);
+      const cell = ws.getCell(`${colLetter}${curRow}`);
+      cell.value = item.v;
+      cell.font = { name: 'Segoe UI', size: 9.5, bold: item.b || false, color: { argb: item.color || SLATE_DARK } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+      cell.alignment = { vertical: 'middle', horizontal: item.a };
+      cell.border = BORDER_LIGHT;
+    });
+    curRow++;
+  });
+
+  // Table 2 Grand Total
+  const t2Row = ws.getRow(curRow);
+  t2Row.height = 22;
+  const t2Vals = [
+    { v: 'Grand Total', a: 'left' },
+    { v: total, a: 'right' },
+    { v: '100.0%', a: 'right' },
+    { v: resolved, a: 'right' },
+    { v: pendingTotal, a: 'right' },
+    { v: tatBreached, a: 'right' },
+    { v: `${tatCompliance}%`, a: 'right' },
+    { v: 'Active', a: 'center' },
+  ];
+  t2Vals.forEach((item, cIdx) => {
+    const colLetter = String.fromCharCode('B'.charCodeAt(0) + cIdx);
+    const cell = ws.getCell(`${colLetter}${curRow}`);
+    cell.value = item.v;
+    cell.font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: CBRE_DARK_GREEN } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+    cell.alignment = { vertical: 'middle', horizontal: item.a };
+    cell.border = BORDER_LIGHT;
+  });
+  curRow += 2;
+
+  // 5. TABLE 3: Chronological Monthly Trend
+  renderSectionHeader('3. CHRONOLOGICAL MONTHLY OPERATIONS TREND');
+  renderTableHeader([
+    { title: 'Operational Month', align: 'left' },
+    { title: 'Total Tickets', align: 'right' },
+    { title: 'Reactive Complaints', align: 'right' },
+    { title: 'Proactive Calls', align: 'right' },
+    { title: 'Resolved', align: 'right' },
+    { title: 'TAT Breached', align: 'right' },
+    { title: 'Monthly Resolution %', align: 'right' },
+    { title: 'TAT Compliance %', align: 'right' },
+  ]);
+
+  const sortedMonths = Object.keys(monthMap).sort(compareMonthsChronologically);
+  sortedMonths.forEach((mKey, idx) => {
+    const m = monthMap[mKey];
+    const mRes = m.total > 0 ? Math.round((m.resolved / m.total) * 100) : 0;
+    const mTat = m.total > 0 ? Math.round(((m.total - m.breached) / m.total) * 100) : 100;
+    const bg = idx % 2 === 0 ? WHITE : SLATE_BG;
+
+    const r = ws.getRow(curRow);
+    r.height = 20;
+    const vals = [
+      { v: mKey, a: 'left', b: true },
+      { v: m.total, a: 'right', b: true },
+      { v: m.reactive, a: 'right' },
+      { v: m.proactive, a: 'right' },
+      { v: m.resolved, a: 'right' },
+      { v: m.breached, a: 'right', color: m.breached > 0 ? NAB_RED : 'FF64748B' },
+      { v: `${mRes}%`, a: 'right' },
+      { v: `${mTat}%`, a: 'right', color: mTat >= 90 ? CBRE_EMERALD : NAB_RED },
+    ];
+    vals.forEach((item, cIdx) => {
+      const colLetter = String.fromCharCode('B'.charCodeAt(0) + cIdx);
+      const cell = ws.getCell(`${colLetter}${curRow}`);
+      cell.value = item.v;
+      cell.font = { name: 'Segoe UI', size: 9.5, bold: item.b || false, color: { argb: item.color || SLATE_DARK } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+      cell.alignment = { vertical: 'middle', horizontal: item.a };
+      cell.border = BORDER_LIGHT;
+    });
+    curRow++;
+  });
+  curRow += 2;
+
+  // 6. TABLE 4: Request Channel Distribution (Request Via)
+  renderSectionHeader('4. REQUEST CHANNEL DISTRIBUTION (REQUEST VIA)');
+  renderTableHeader([
+    { title: 'Intake Channel', align: 'left' },
+    { title: 'Volume Received', align: 'right' },
+    { title: 'Channel Share %', align: 'right' },
+    { title: 'Intake Mode', align: 'center' },
+  ]);
+
+  Object.entries(channelMap).forEach(([channelName, count], idx) => {
+    const share = total > 0 ? (count / total) * 100 : 0;
+    const bg = idx % 2 === 0 ? WHITE : SLATE_BG;
+    const r = ws.getRow(curRow);
+    r.height = 20;
+    const vals = [
+      { v: channelName, a: 'left', b: true },
+      { v: count, a: 'right' },
+      { v: `${share.toFixed(1)}%`, a: 'right' },
+      { v: channelName.toLowerCase().includes('phone') ? 'Immediate Voice' : channelName.toLowerCase().includes('person') ? 'Direct Walk-in' : 'Digital / Portal', a: 'center' },
+    ];
+    vals.forEach((item, cIdx) => {
+      const colLetter = String.fromCharCode('B'.charCodeAt(0) + cIdx);
+      const cell = ws.getCell(`${colLetter}${curRow}`);
+      cell.value = item.v;
+      cell.font = { name: 'Segoe UI', size: 9.5, bold: item.b || false, color: { argb: SLATE_DARK } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+      cell.alignment = { vertical: 'middle', horizontal: item.a };
+      cell.border = BORDER_LIGHT;
+    });
+    curRow++;
+  });
+  curRow += 2;
+
+  // 7. TABLE 5: Top 8 Recurring Reactive Complaints
+  renderSectionHeader('5. TOP 8 RECURRING REACTIVE COMPLAINTS / ISSUES');
+  renderTableHeader([
+    { title: 'Rank', align: 'center' },
+    { title: 'Complaint / Issue Description', align: 'left' },
+    { title: 'Frequency', align: 'right' },
+    { title: 'Priority Attention', align: 'center' },
+  ]);
+
+  const topIssues = Object.entries(issueCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
+
+  if (topIssues.length === 0) {
+    ws.mergeCells(`B${curRow}:E${curRow}`);
+    const cell = ws.getCell(`B${curRow}`);
+    cell.value = 'No reactive complaint data recorded for this period';
+    cell.font = { name: 'Segoe UI', size: 9.5, italic: true, color: { argb: 'FF64748B' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    curRow++;
+  } else {
+    topIssues.forEach(([desc, cnt], idx) => {
+      const bg = idx % 2 === 0 ? WHITE : SLATE_BG;
+      const r = ws.getRow(curRow);
+      r.height = 20;
+      const vals = [
+        { v: `#${idx + 1}`, a: 'center', b: true },
+        { v: desc, a: 'left' },
+        { v: cnt, a: 'right', b: true },
+        { v: idx < 3 ? 'High Priority' : 'Standard', a: 'center', color: idx < 3 ? NAB_RED : 'FF64748B' },
+      ];
+      vals.forEach((item, cIdx) => {
+        const colLetter = String.fromCharCode('B'.charCodeAt(0) + cIdx);
+        const cell = ws.getCell(`${colLetter}${curRow}`);
+        cell.value = item.v;
+        cell.font = { name: 'Segoe UI', size: 9.5, bold: item.b || false, color: { argb: item.color || SLATE_DARK } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+        cell.alignment = { vertical: 'middle', horizontal: item.a };
+        cell.border = BORDER_LIGHT;
+      });
+      curRow++;
+    });
+  }
+}
+
+/**
+ * Export tickets into separate sheets for 2026 and 2025 with an Executive Dashboard sheet as first tab
  */
 export async function exportTicketsToExcel(tickets, filename = 'Helpdesk_Tracker_Export.xlsx', selectedYear = 'all') {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'CBRE Facility Tracker Hub';
+  workbook.creator = 'CBRE | NAB Facility Tracker Hub';
   workbook.created = new Date();
 
-  // Split tickets by year
+  // 1. FIRST WORKSHEET: Dedicated Executive Dashboard matching the in-app analytics
+  buildDashboardSheet(workbook, tickets, selectedYear);
+
+  // 2. DATA SHEETS: Split tickets by year
   const tickets2026 = tickets.filter((t) => detectTicketYear(t) === '2026');
   const tickets2025 = tickets.filter((t) => detectTicketYear(t) === '2025');
 

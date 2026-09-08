@@ -44,8 +44,14 @@ export default function Navbar({
         <div className="flex items-center justify-between h-16">
           {/* Brand Logo & Year Switcher */}
           <div className="flex items-center space-x-3">
-            <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-emerald-600 flex items-center justify-center shadow-inner text-white font-bold text-lg sm:text-xl tracking-wider flex-shrink-0">
-              HD
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <span className="h-9 sm:h-10 px-2.5 rounded-xl bg-[#003F2D] border border-emerald-500/40 flex items-center justify-center shadow-md text-emerald-300 font-black text-xs sm:text-sm tracking-wider">
+                CBRE
+              </span>
+              <span className="text-slate-500 text-xs font-bold">×</span>
+              <span className="h-9 sm:h-10 px-2 rounded-xl bg-[#D40026] flex items-center justify-center shadow-md text-white font-black text-xs sm:text-sm tracking-wider gap-0.5">
+                <span className="text-[10px]">★</span>NAB
+              </span>
             </div>
             <div>
               <div className="flex items-center space-x-2">
@@ -125,7 +131,7 @@ export default function Navbar({
               onClick={() => onTabChange && onTabChange('analytics')}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
                 activeTab === 'analytics'
-                  ? 'bg-indigo-600 text-white shadow-md'
+                  ? 'bg-gradient-to-r from-[#003F2D] to-[#D40026] text-white shadow-md border border-emerald-500/30'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
               }`}
             >
@@ -152,7 +158,7 @@ export default function Navbar({
                 type="button"
                 onClick={() => onTabChange && onTabChange('analytics')}
                 className={`p-1.5 rounded text-xs font-bold ${
-                  activeTab === 'analytics' ? 'bg-indigo-600 text-white' : 'text-slate-400'
+                  activeTab === 'analytics' ? 'bg-gradient-to-r from-[#003F2D] to-[#D40026] text-white' : 'text-slate-400'
                 }`}
                 title="Analytics Dashboard"
               >
@@ -219,7 +225,7 @@ export default function Navbar({
             {user ? (
               <div className="flex items-center space-x-2 pl-1.5 border-l border-slate-800">
                 <div className="flex items-center space-x-2 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/70">
-                  <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-emerald-500 to-indigo-600 text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 shadow-sm">
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-emerald-600 to-[#D40026] text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 shadow-sm">
                     {((user.displayName || user.email || 'U')
                       .split(' ')
                       .map((n) => n[0])
@@ -250,7 +256,7 @@ export default function Navbar({
             ) : (
               <button
                 onClick={onOpenAuth}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition shadow-sm"
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm"
               >
                 Sign In
               </button>
@@ -297,7 +303,9 @@ export default function Navbar({
                   setMobileMenuOpen(false);
                 }}
                 className={`flex items-center justify-center p-2.5 rounded-xl text-xs font-semibold ${
-                  activeTab === 'analytics' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200'
+                  activeTab === 'analytics'
+                    ? 'bg-gradient-to-r from-[#003F2D] to-[#D40026] text-white'
+                    : 'bg-slate-800 text-slate-200'
                 }`}
               >
                 <BarChart3 className="w-4 h-4 mr-1.5" />
@@ -350,7 +358,7 @@ export default function Navbar({
             {user ? (
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300">
                 <div className="flex items-center space-x-2 min-w-0">
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-emerald-500 to-indigo-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0">
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-emerald-600 to-[#D40026] text-white font-bold text-xs flex items-center justify-center flex-shrink-0">
                     {((user.displayName || user.email || 'U')
                       .split(' ')
                       .map((n) => n[0])
@@ -386,7 +394,7 @@ export default function Navbar({
                   onOpenAuth();
                   setMobileMenuOpen(false);
                 }}
-                className="w-full py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold text-center"
+                className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold text-center transition"
               >
                 Sign In / Sign Up
               </button>

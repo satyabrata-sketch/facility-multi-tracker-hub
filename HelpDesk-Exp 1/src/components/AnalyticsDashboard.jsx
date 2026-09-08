@@ -52,37 +52,37 @@ import {
 } from '../utils/schema';
 
 const STATUS_COLORS = {
-  Resolved: '#10b981',
-  Closed: '#10b981',
-  'Not Resolved': '#ef4444',
+  Resolved: '#10b981', // CBRE Emerald
+  Closed: '#059669',
+  'Not Resolved': '#D40026', // NAB Star Red
   Open: '#f59e0b',
-  'In-Progress': '#3b82f6',
+  'In-Progress': '#0284c7',
   Other: '#94a3b8',
 };
 
 const CATEGORY_COLORS = [
-  '#6366f1',
-  '#06b6d4',
-  '#10b981',
-  '#f59e0b',
-  '#ec4899',
-  '#8b5cf6',
-  '#f97316',
-  '#14b8a6',
+  '#006A4E', // CBRE Forest Green
+  '#D40026', // NAB Star Red
+  '#10b981', // CBRE Emerald
+  '#f59e0b', // Amber
+  '#0284c7', // Sky Blue
+  '#059669', // Mint Green
+  '#e11d48', // Crimson Rose
+  '#0d9488', // Deep Teal
 ];
 
 const PRIORITY_COLORS = {
-  High: '#ef4444',
+  High: '#D40026', // NAB Star Red Alert
   Medium: '#f59e0b',
-  Low: '#10b981',
+  Low: '#10b981', // CBRE Green
 };
 
 const CHANNEL_COLORS = {
-  'In person': '#3b82f6',
-  Mail: '#8b5cf6',
-  Phone: '#10b981',
-  'Feedback Form': '#f59e0b',
-  ' Feedback form': '#f59e0b',
+  'In person': '#006A4E', // CBRE Forest Green
+  Mail: '#0284c7',        // Blue
+  Phone: '#10b981',       // Emerald
+  'Feedback Form': '#D40026', // NAB Star Red
+  ' Feedback form': '#D40026',
 };
 
 export default function AnalyticsDashboard({
@@ -765,36 +765,54 @@ export default function AnalyticsDashboard({
   }, [filteredDataset]);
 
   return (
-    <div className="bg-slate-900 border-b border-slate-800 text-slate-100 p-4 sm:p-6 space-y-6 transition-all">
+    <div className="bg-gradient-to-b from-[#061912] via-[#0b1c16] to-[#0f172a] border-b border-emerald-900/40 text-slate-100 p-4 sm:p-6 space-y-6 transition-all font-sans">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* ========================================================================= */}
-        {/* 1. TOP PROMINENT 2025 vs 2026 YEAR TOGGLE (CONNECTS TO ALL DATA) */}
+        {/* 1. TOP PROMINENT CBRE | NAB CO-BRANDED HEADER & YEAR TOGGLE */}
         {/* ========================================================================= */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
-          <div className="space-y-1">
-            <div className="flex items-center space-x-2">
-              <span className="p-2 rounded-xl bg-indigo-600/30 text-indigo-400 border border-indigo-500/30">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-emerald-900/40">
+          <div className="space-y-1.5">
+            {/* Co-Branded Enterprise Badge Bar */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-md bg-[#003F2D] text-emerald-300 font-black text-[11px] tracking-wider border border-emerald-500/40 shadow-sm flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                CBRE
+              </span>
+              <span className="text-slate-500 text-xs font-semibold">×</span>
+              <span className="px-2.5 py-0.5 rounded-md bg-[#D40026] text-white font-black text-[11px] tracking-wider border border-red-400/40 shadow-sm flex items-center gap-1">
+                <span className="text-[10px]">★</span>
+                NAB
+              </span>
+              <span className="text-[11px] font-semibold text-slate-400 tracking-wide">
+                Facility Management Operations Hub
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-2.5">
+              <span className="p-2 rounded-xl bg-emerald-950/80 text-emerald-400 border border-emerald-600/30 shadow-inner">
                 <Activity className="w-5 h-5" />
               </span>
-              <h2 className="text-lg font-bold text-white tracking-tight">
-                Operations & Reactive Analytics Hub
-              </h2>
+              <div>
+                <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                  Operations & Reactive Analytics Hub
+                </h2>
+                <p className="text-xs text-slate-400">
+                  National Australia Bank Client Portfolio • Managed by CBRE Enterprise Facility Management
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-slate-400">
-              Toggle year section below to switch all charts, drill-downs, and table data
-            </p>
           </div>
 
           {/* TWO SECTION TOGGLE: 2026 (CURRENT) vs 2025 (HISTORICAL) */}
-          <div className="inline-flex p-1.5 bg-slate-800/90 rounded-2xl border border-slate-700 shadow-inner self-start md:self-auto">
+          <div className="inline-flex p-1.5 bg-[#091f17]/90 rounded-2xl border border-emerald-900/50 shadow-inner self-start md:self-auto backdrop-blur-sm">
             {/* 2026 Section Button */}
             <button
               type="button"
               onClick={() => handleYearToggle('2026')}
               className={`px-4 sm:px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
                 activeYear === '2026'
-                  ? 'bg-emerald-600 text-white shadow-lg ring-2 ring-emerald-400/40'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-700/60'
+                  ? 'bg-gradient-to-r from-emerald-700 to-[#004B37] text-white shadow-lg ring-2 ring-emerald-400/50 border border-emerald-500/40'
+                  : 'text-slate-400 hover:text-white hover:bg-emerald-950/40'
               }`}
             >
               <span
@@ -803,7 +821,10 @@ export default function AnalyticsDashboard({
                 }`}
               ></span>
               <div className="text-left">
-                <div className="leading-none">FY 2025-26 (2026)</div>
+                <div className="leading-none flex items-center gap-1.5">
+                  <span>FY 2025-26 (2026)</span>
+                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold uppercase">Active</span>
+                </div>
                 <div
                   className={`text-[10px] font-normal mt-0.5 ${
                     activeYear === '2026' ? 'text-emerald-100' : 'text-slate-400'
@@ -820,20 +841,20 @@ export default function AnalyticsDashboard({
               onClick={() => handleYearToggle('2025')}
               className={`px-4 sm:px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
                 activeYear === '2025'
-                  ? 'bg-blue-600 text-white shadow-lg ring-2 ring-blue-400/40'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-700/60'
+                  ? 'bg-gradient-to-r from-slate-800 to-slate-900 text-white shadow-lg ring-2 ring-slate-400/40 border border-slate-700'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
               }`}
             >
               <span
                 className={`w-2.5 h-2.5 rounded-full ${
-                  activeYear === '2025' ? 'bg-white' : 'bg-blue-400'
+                  activeYear === '2025' ? 'bg-white' : 'bg-slate-400'
                 }`}
               ></span>
               <div className="text-left">
                 <div className="leading-none">FY 2024-25 (2025)</div>
                 <div
                   className={`text-[10px] font-normal mt-0.5 ${
-                    activeYear === '2025' ? 'text-blue-100' : 'text-slate-400'
+                    activeYear === '2025' ? 'text-slate-200' : 'text-slate-400'
                   }`}
                 >
                   Historical Baseline ({count2025} tickets)
@@ -847,20 +868,20 @@ export default function AnalyticsDashboard({
               onClick={() => handleYearToggle('all')}
               className={`px-4 sm:px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
                 activeYear === 'all'
-                  ? 'bg-indigo-600 text-white shadow-lg ring-2 ring-indigo-400/40'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-700/60'
+                  ? 'bg-gradient-to-r from-[#2a0e14] to-[#1e0d12] text-rose-200 shadow-lg ring-2 ring-[#D40026]/50 border border-[#D40026]/40'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
               }`}
             >
               <span
                 className={`w-2.5 h-2.5 rounded-full ${
-                  activeYear === 'all' ? 'bg-white' : 'bg-indigo-400'
+                  activeYear === 'all' ? 'bg-[#D40026]' : 'bg-slate-400'
                 }`}
               ></span>
               <div className="text-left">
                 <div className="leading-none">All Records</div>
                 <div
                   className={`text-[10px] font-normal mt-0.5 ${
-                    activeYear === 'all' ? 'text-indigo-100' : 'text-slate-400'
+                    activeYear === 'all' ? 'text-rose-200' : 'text-slate-400'
                   }`}
                 >
                   Combined ({cleanTickets.length} tickets)
@@ -873,15 +894,15 @@ export default function AnalyticsDashboard({
         {/* ========================================================================= */}
         {/* 2. ANALYTICS FILTER BAR */}
         {/* ========================================================================= */}
-        <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700/80 space-y-3 shadow-md">
+        <div className="bg-[#091d16]/90 rounded-2xl p-4 border border-emerald-900/50 space-y-3 shadow-lg backdrop-blur-sm">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <Filter className="w-4 h-4 text-indigo-400" />
+              <Filter className="w-4 h-4 text-emerald-400" />
               <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                Active Year: {activeYear} Filters
+                Active Year: {activeYear === 'all' ? 'All Years' : activeYear} Filters
               </span>
               {activeFilterCount > 0 && (
-                <span className="bg-indigo-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                <span className="bg-[#003F2D] text-emerald-300 border border-emerald-500/40 text-[10px] font-bold px-2 py-0.5 rounded-full">
                   {activeFilterCount} active
                 </span>
               )}
@@ -892,7 +913,7 @@ export default function AnalyticsDashboard({
                 <button
                   type="button"
                   onClick={() => handleDrilldown({ type: 'all' })}
-                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                  className="px-3 py-1 bg-gradient-to-r from-[#003F2D] to-emerald-700 hover:from-emerald-700 hover:to-emerald-600 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center gap-1.5 active:scale-95 cursor-pointer border border-emerald-500/30"
                   title="Open filtered tickets directly in Tracker Grid"
                 >
                   <Eye className="w-3.5 h-3.5" />
@@ -904,7 +925,7 @@ export default function AnalyticsDashboard({
               {activeFilterCount > 0 && (
                 <button
                   onClick={resetFilters}
-                  className="text-xs text-slate-400 hover:text-rose-400 font-medium flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-700/60 hover:border-rose-500/50 transition cursor-pointer"
+                  className="text-xs text-slate-400 hover:text-[#D40026] font-medium flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-700/60 hover:border-[#D40026]/50 transition cursor-pointer"
                 >
                   <RotateCcw className="w-3 h-3" />
                   Reset Filters
@@ -922,7 +943,7 @@ export default function AnalyticsDashboard({
               <select
                 value={siteFilter}
                 onChange={(e) => setSiteFilter(e.target.value)}
-                className="w-full text-xs px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 focus:ring-1 focus:ring-indigo-500"
+                className="w-full text-xs px-2.5 py-1.5 bg-slate-900 border border-emerald-900/60 rounded-lg text-slate-200 focus:ring-1 focus:ring-emerald-500"
               >
                 <option value="all">All Sites</option>
                 <option value="DT3">DT3</option>
@@ -941,7 +962,7 @@ export default function AnalyticsDashboard({
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="w-full text-xs px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 focus:ring-1 focus:ring-indigo-500"
+                className="w-full text-xs px-2.5 py-1.5 bg-slate-900 border border-emerald-900/60 rounded-lg text-slate-200 focus:ring-1 focus:ring-emerald-500"
               >
                 <option value="all">All Categories</option>
                 {allCategories.map((cat) => (
@@ -960,7 +981,7 @@ export default function AnalyticsDashboard({
               <select
                 value={callTypeFilter}
                 onChange={(e) => setCallTypeFilter(e.target.value)}
-                className="w-full text-xs px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 focus:ring-1 focus:ring-indigo-500"
+                className="w-full text-xs px-2.5 py-1.5 bg-slate-900 border border-emerald-900/60 rounded-lg text-slate-200 focus:ring-1 focus:ring-emerald-500"
               >
                 <option value="all">All Call Types</option>
                 <option value="Reactive">Reactive (Complaints)</option>
@@ -976,7 +997,7 @@ export default function AnalyticsDashboard({
               <select
                 value={requestViaFilter}
                 onChange={(e) => setRequestViaFilter(e.target.value)}
-                className="w-full text-xs px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 focus:ring-1 focus:ring-indigo-500"
+                className="w-full text-xs px-2.5 py-1.5 bg-slate-900 border border-emerald-900/60 rounded-lg text-slate-200 focus:ring-1 focus:ring-emerald-500"
               >
                 <option value="all">All Channels</option>
                 <option value="In person">In person</option>
@@ -994,7 +1015,7 @@ export default function AnalyticsDashboard({
               <select
                 value={monthFilter}
                 onChange={(e) => setMonthFilter(e.target.value)}
-                className="w-full text-xs px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 focus:ring-1 focus:ring-indigo-500 font-mono"
+                className="w-full text-xs px-2.5 py-1.5 bg-slate-900 border border-emerald-900/60 rounded-lg text-slate-200 focus:ring-1 focus:ring-emerald-500 font-mono"
               >
                 <option value="all">All Months</option>
                 {availableMonths.map((m) => (
@@ -1013,7 +1034,7 @@ export default function AnalyticsDashboard({
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full text-xs px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 focus:ring-1 focus:ring-indigo-500"
+                className="w-full text-xs px-2.5 py-1.5 bg-slate-900 border border-emerald-900/60 rounded-lg text-slate-200 focus:ring-1 focus:ring-emerald-500"
               >
                 <option value="all">All Statuses</option>
                 <option value="Resolved">Resolved</option>
@@ -1026,33 +1047,33 @@ export default function AnalyticsDashboard({
         </div>
 
         {/* ========================================================================= */}
-        {/* 3. EXECUTIVE KPIS (CLICKABLE -> OPENS TRACKER GRID PRE-FILTERED) */}
+        {/* 3. EXECUTIVE KPIS (CBRE GREEN & NAB RED CO-BRANDED STYLING) */}
         {/* ========================================================================= */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {/* Card 1: Total Tickets */}
+          {/* Card 1: Total Tickets (CBRE Forest Emerald Theme) */}
           <div
             onClick={() => handleDrilldown({ type: 'all', label: `Total Volume (${activeYear})` })}
-            className="bg-slate-800/90 rounded-2xl p-4 border border-slate-700 shadow-sm cursor-pointer hover:border-indigo-500 hover:bg-slate-800 transition group"
+            className="bg-gradient-to-br from-[#0c241c] via-[#0f2920] to-[#0a1f18] rounded-2xl p-4 border border-emerald-700/40 shadow-md cursor-pointer hover:border-emerald-400 hover:shadow-emerald-950/40 transition group"
             title="Click to view all filtered tickets in Tracker Grid"
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              <span className="text-[11px] font-semibold text-emerald-300/80 uppercase tracking-wider">
                 Total Volume
               </span>
-              <Inbox className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition" />
+              <Inbox className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-bold text-white">
+              <span className="text-2xl sm:text-3xl font-bold text-white group-hover:text-emerald-200">
                 {overallMetrics.total}
               </span>
             </div>
-            <div className="mt-2 text-[10px] text-indigo-400 flex items-center gap-1 group-hover:underline">
+            <div className="mt-2 text-[10px] text-emerald-400 flex items-center gap-1 group-hover:underline">
               <span>Open in Tracker</span>
               <ChevronRight className="w-3 h-3" />
             </div>
           </div>
 
-          {/* Card 2: PENDING REQUESTS (Highlighted with Urgent Pulse Alert) */}
+          {/* Card 2: PENDING REQUESTS (NAB Star Red Urgent Pulse Alert) */}
           <div
             onClick={() =>
               handleDrilldown({
@@ -1060,31 +1081,31 @@ export default function AnalyticsDashboard({
                 label: `Pending Requests (${activeYear})`,
               })
             }
-            className="bg-gradient-to-br from-rose-950/60 to-slate-800/90 rounded-2xl p-4 border-2 border-rose-500/50 shadow-sm cursor-pointer hover:border-rose-400 hover:shadow-rose-900/20 transition group"
+            className="bg-gradient-to-br from-[#2a0e14] via-[#200a0f] to-[#17060a] rounded-2xl p-4 border-2 border-[#D40026]/70 shadow-lg cursor-pointer hover:border-[#D40026] hover:shadow-red-950/40 transition group ring-1 ring-[#D40026]/30"
             title="Click to view Pending tickets in Tracker Grid"
           >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-rose-300 uppercase tracking-wider flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5 text-rose-400 animate-bounce" />
+                <AlertTriangle className="w-3.5 h-3.5 text-[#D40026] animate-bounce" />
                 Pending Requests
               </span>
-              <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+              <span className="w-2 h-2 rounded-full bg-[#D40026] animate-ping"></span>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl sm:text-3xl font-bold text-rose-400">
                 {overallMetrics.pendingTotal}
               </span>
-              <span className="text-xs text-rose-300/80">
+              <span className="text-xs text-rose-300/80 font-semibold">
                 ({overallMetrics.total > 0 ? Math.round((overallMetrics.pendingTotal / overallMetrics.total) * 100) : 0}%)
               </span>
             </div>
-            <div className="mt-2 text-[10px] text-rose-300 flex items-center gap-1 font-semibold group-hover:underline">
+            <div className="mt-2 text-[10px] text-rose-400 flex items-center gap-1 font-semibold group-hover:underline">
               <span>View Backlog in Tracker</span>
               <ChevronRight className="w-3 h-3" />
             </div>
           </div>
 
-          {/* Card 3: Reactive Complaints */}
+          {/* Card 3: Reactive Complaints (NAB Crimson Accent) */}
           <div
             onClick={() =>
               handleDrilldown({
@@ -1093,28 +1114,28 @@ export default function AnalyticsDashboard({
                 label: 'Reactive Complaints',
               })
             }
-            className="bg-slate-800/90 rounded-2xl p-4 border border-slate-700 shadow-sm cursor-pointer hover:border-amber-500 transition group"
+            className="bg-gradient-to-br from-[#241016] via-[#1c0c11] to-[#14080c] rounded-2xl p-4 border border-rose-900/50 shadow-sm cursor-pointer hover:border-[#D40026]/60 transition group"
             title="Click to view Reactive complaints in Tracker Grid"
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-1">
-                <Zap className="w-3.5 h-3.5" />
+              <span className="text-[11px] font-semibold text-rose-300 uppercase tracking-wider flex items-center gap-1">
+                <Zap className="w-3.5 h-3.5 text-rose-400" />
                 Reactive
               </span>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-bold text-amber-400">
+              <span className="text-2xl sm:text-3xl font-bold text-rose-300">
                 {overallMetrics.reactive}
               </span>
-              <span className="text-xs text-amber-200/70">({overallMetrics.reactiveRate}%)</span>
+              <span className="text-xs text-rose-300/70">({overallMetrics.reactiveRate}%)</span>
             </div>
-            <div className="mt-2 text-[10px] text-amber-400 flex items-center gap-1 group-hover:underline">
+            <div className="mt-2 text-[10px] text-rose-400 flex items-center gap-1 group-hover:underline">
               <span>Open in Tracker</span>
               <ChevronRight className="w-3 h-3" />
             </div>
           </div>
 
-          {/* Card 4: Proactive Walkthroughs */}
+          {/* Card 4: Proactive Walkthroughs (CBRE Forest Green Theme) */}
           <div
             onClick={() =>
               handleDrilldown({
@@ -1123,20 +1144,20 @@ export default function AnalyticsDashboard({
                 label: 'Proactive Walkthroughs',
               })
             }
-            className="bg-slate-800/90 rounded-2xl p-4 border border-slate-700 shadow-sm cursor-pointer hover:border-emerald-500 transition group"
+            className="bg-gradient-to-br from-[#09231a] via-[#0d2e23] to-[#081d16] rounded-2xl p-4 border border-emerald-700/40 shadow-sm cursor-pointer hover:border-emerald-400 transition group"
             title="Click to view Proactive tickets in Tracker Grid"
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5" />
+              <span className="text-[11px] font-semibold text-emerald-300 uppercase tracking-wider flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                 Proactive
               </span>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-bold text-emerald-400">
+              <span className="text-2xl sm:text-3xl font-bold text-emerald-300">
                 {overallMetrics.proactive}
               </span>
-              <span className="text-xs text-emerald-200/70">({overallMetrics.proactiveRate}%)</span>
+              <span className="text-xs text-emerald-300/70">({overallMetrics.proactiveRate}%)</span>
             </div>
             <div className="mt-2 text-[10px] text-emerald-400 flex items-center gap-1 group-hover:underline">
               <span>Open in Tracker</span>
@@ -1144,7 +1165,7 @@ export default function AnalyticsDashboard({
             </div>
           </div>
 
-          {/* Card 5: Resolved Rate */}
+          {/* Card 5: Resolved Rate (CBRE Emerald Theme) */}
           <div
             onClick={() =>
               handleDrilldown({
@@ -1153,11 +1174,11 @@ export default function AnalyticsDashboard({
                 label: 'Resolved Tickets',
               })
             }
-            className="bg-slate-800/90 rounded-2xl p-4 border border-slate-700 shadow-sm cursor-pointer hover:border-emerald-500 transition group"
+            className="bg-gradient-to-br from-[#09231a] via-[#0d2e23] to-[#081d16] rounded-2xl p-4 border border-emerald-700/40 shadow-sm cursor-pointer hover:border-emerald-400 transition group"
             title="Click to view Resolved tickets in Tracker Grid"
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              <span className="text-[11px] font-semibold text-emerald-300/80 uppercase tracking-wider">
                 Resolved
               </span>
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -1166,7 +1187,7 @@ export default function AnalyticsDashboard({
               <span className="text-2xl sm:text-3xl font-bold text-emerald-400">
                 {overallMetrics.resolved}
               </span>
-              <span className="text-xs text-emerald-400 font-semibold">
+              <span className="text-xs text-emerald-300 font-semibold">
                 ({overallMetrics.resolutionRate}%)
               </span>
             </div>
@@ -1176,7 +1197,7 @@ export default function AnalyticsDashboard({
             </div>
           </div>
 
-          {/* Card 6: SLA TAT Compliance */}
+          {/* Card 6: SLA TAT Compliance (Dual CBRE & NAB Indicator) */}
           <div
             onClick={() =>
               handleDrilldown({
@@ -1185,17 +1206,17 @@ export default function AnalyticsDashboard({
                 label: 'Breached SLA / TAT Tickets',
               })
             }
-            className="bg-slate-800/90 rounded-2xl p-4 border border-slate-700 shadow-sm cursor-pointer hover:border-rose-500 transition group"
+            className="bg-gradient-to-br from-[#0c241c] to-[#0f172a] rounded-2xl p-4 border border-emerald-700/40 shadow-sm cursor-pointer hover:border-rose-500 transition group"
             title="Click to view Breached SLA tickets in Tracker Grid"
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
                 SLA (TAT)
               </span>
-              <Clock className="w-4 h-4 text-indigo-400" />
+              <Clock className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-bold text-indigo-400">
+              <span className="text-2xl sm:text-3xl font-bold text-emerald-400">
                 {overallMetrics.tatCompliance}%
               </span>
               {overallMetrics.tatBreached > 0 && (
@@ -1243,7 +1264,7 @@ export default function AnalyticsDashboard({
                   label: 'Pending Requests Backlog',
                 })
               }
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl shadow-md transition flex items-center gap-2 self-start sm:self-auto cursor-pointer"
+              className="px-4 py-2 bg-[#D40026] hover:bg-[#b0001e] text-white text-xs font-bold rounded-xl shadow-md transition flex items-center gap-2 self-start sm:self-auto cursor-pointer"
             >
               <span>View All {pendingAnalytics.total} Pending in Tracker</span>
               <ArrowRight className="w-4 h-4" />
@@ -1324,12 +1345,17 @@ export default function AnalyticsDashboard({
                         label: `Pending at Site: ${item.name}`,
                       })
                     }
-                    className="p-2 rounded-xl bg-slate-900/80 border border-slate-700/60 hover:border-indigo-500 cursor-pointer transition flex items-center justify-between"
+                    className="p-2 rounded-xl bg-slate-900/80 border border-slate-700/60 hover:border-[#D40026]/70 cursor-pointer transition flex items-center justify-between"
                   >
                     <span className="text-xs font-semibold text-slate-200">{item.name}</span>
-                    <span className="text-xs font-bold text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded-md border border-rose-800/60">
-                      {item.count} pending
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs font-bold text-rose-400">
+                        {item.count} open
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        ({item.percentage}%)
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1339,8 +1365,8 @@ export default function AnalyticsDashboard({
             <div className="bg-slate-800/90 rounded-2xl p-4 border border-slate-700/80 space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-                  Pending Status Breakdown
+                  <AlertOctagon className="w-3.5 h-3.5 text-amber-400" />
+                  Pending by Priority
                 </h4>
                 <span className="text-[10px] text-slate-400">Click to filter</span>
               </div>
@@ -1348,27 +1374,24 @@ export default function AnalyticsDashboard({
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={pendingAnalytics.byStatus}
+                      data={pendingAnalytics.byPriority}
                       cx="50%"
                       cy="50%"
-                      innerRadius={30}
-                      outerRadius={55}
+                      innerRadius={35}
+                      outerRadius={65}
                       paddingAngle={4}
                       dataKey="value"
                       onClick={(entry) =>
                         handleDrilldown({
-                          type: 'status',
-                          value: entry.name,
-                          label: `Status: ${entry.name}`,
+                          type: 'compound',
+                          filters: { priority: entry.name, isPending: true },
+                          label: `Pending Priority: ${entry.name}`,
                         })
                       }
                       className="cursor-pointer"
                     >
-                      {pendingAnalytics.byStatus.map((entry, idx) => (
-                        <Cell
-                          key={idx}
-                          fill={STATUS_COLORS[entry.name] || CATEGORY_COLORS[idx]}
-                        />
+                      {pendingAnalytics.byPriority.map((entry, idx) => (
+                        <Cell key={idx} fill={PRIORITY_COLORS[entry.name] || '#3b82f6'} />
                       ))}
                     </Pie>
                     <Tooltip
@@ -1396,10 +1419,10 @@ export default function AnalyticsDashboard({
             <div className="bg-slate-800/90 rounded-2xl p-4 border border-slate-700/80 space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  <Clock className="w-3.5 h-3.5 text-[#D40026]" />
                   Actionable Pending Tickets ({pendingAnalytics.topPendingList.length} shown)
                 </h4>
-                <span className="text-[11px] text-indigo-400 font-semibold">
+                <span className="text-[11px] text-emerald-400 font-semibold">
                   Click any row or button to jump directly into the ticket in Tracker
                 </span>
               </div>
@@ -1430,7 +1453,7 @@ export default function AnalyticsDashboard({
                         }
                         className="hover:bg-slate-700/50 cursor-pointer transition"
                       >
-                        <td className="py-2.5 px-3 font-mono font-bold text-indigo-400">
+                        <td className="py-2.5 px-3 font-mono font-bold text-emerald-400">
                           #{t['Sr no.']}
                         </td>
                         <td className="py-2.5 px-3 font-semibold text-white">{t['Site ']}</td>
@@ -1471,7 +1494,7 @@ export default function AnalyticsDashboard({
                                 label: `Ticket #${t['Sr no.']}`,
                               });
                             }}
-                            className="p-1 px-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[10px] font-bold inline-flex items-center gap-1 shadow"
+                            className="p-1 px-2 bg-[#D40026] hover:bg-[#b0001e] text-white rounded text-[10px] font-bold inline-flex items-center gap-1 shadow transition"
                           >
                             <span>Open</span>
                             <ExternalLink className="w-3 h-3" />
@@ -1490,12 +1513,12 @@ export default function AnalyticsDashboard({
         {/* 5. ALL DATA VISUALS MATCHING DASHBOARD EXCEL SHEET */}
         {/* ========================================================================= */}
         <div className="space-y-6">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+          <div className="flex items-center justify-between pb-2 border-b border-emerald-900/40">
             <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-              <Layers className="w-4 h-4 text-indigo-400" />
+              <Layers className="w-4 h-4 text-emerald-400" />
               Excel Dashboard Visualizations (HELP DESK TRACKER FY 25-26)
             </h3>
-            <span className="text-xs text-indigo-400">Click any chart bar or slice to view tickets</span>
+            <span className="text-xs text-emerald-400">Click any chart bar or slice to view tickets</span>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -1504,7 +1527,7 @@ export default function AnalyticsDashboard({
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                    <Tag className="w-3.5 h-3.5 text-indigo-400" />
+                    <Tag className="w-3.5 h-3.5 text-emerald-400" />
                     Request Category Month Wise (Excel Chart 1)
                   </h4>
                   <p className="text-[10px] text-slate-400 mt-0.5">
@@ -1520,7 +1543,7 @@ export default function AnalyticsDashboard({
                       label: 'All Category Breakdown',
                     })
                   }
-                  className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                  className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
                 >
                   <span>Tracker</span>
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -1554,7 +1577,7 @@ export default function AnalyticsDashboard({
                       <Bar
                         dataKey="Housekeeping"
                         stackId="a"
-                        fill="#6366f1"
+                        fill="#006A4E"
                         onClick={() =>
                           handleDrilldown({
                             type: 'category',
@@ -1619,7 +1642,7 @@ export default function AnalyticsDashboard({
                       <Bar
                         dataKey="F&B"
                         stackId="a"
-                        fill="#f97316"
+                        fill="#D40026"
                         onClick={() =>
                           handleDrilldown({
                             type: 'category',
@@ -1673,7 +1696,7 @@ export default function AnalyticsDashboard({
                       label: 'Reactive Complaints',
                     })
                   }
-                  className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
+                  className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1"
                 >
                   <span>Filter Reactive</span>
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -1718,7 +1741,7 @@ export default function AnalyticsDashboard({
                     />
                     <Bar
                       dataKey="Reactive"
-                      fill="#f59e0b"
+                      fill="#D40026"
                       radius={[4, 4, 0, 0]}
                       onClick={(entry) =>
                         handleDrilldown({
@@ -1741,7 +1764,7 @@ export default function AnalyticsDashboard({
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                    <TrendingUp className="w-3.5 h-3.5 text-blue-400" />
+                    <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
                     Monthwise Request Count (Excel Chart 3)
                   </h4>
                   <p className="text-[10px] text-slate-400 mt-0.5">
@@ -1769,8 +1792,8 @@ export default function AnalyticsDashboard({
                     >
                       <defs>
                         <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                          <stop offset="5%" stopColor="#006A4E" stopOpacity={0.8} />
+                          <stop offset="95%" stopColor="#006A4E" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
@@ -1787,7 +1810,7 @@ export default function AnalyticsDashboard({
                       <Area
                         type="monotone"
                         dataKey="count"
-                        stroke="#3b82f6"
+                        stroke="#10b981"
                         strokeWidth={2}
                         fillOpacity={1}
                         fill="url(#colorTotal)"
@@ -1842,7 +1865,7 @@ export default function AnalyticsDashboard({
                       />
                       <Bar
                         dataKey="In person"
-                        fill="#3b82f6"
+                        fill="#006A4E"
                         stackId="ch"
                         onClick={() =>
                           handleDrilldown({
@@ -1855,7 +1878,7 @@ export default function AnalyticsDashboard({
                       />
                       <Bar
                         dataKey="Mail"
-                        fill="#8b5cf6"
+                        fill="#D40026"
                         stackId="ch"
                         onClick={() =>
                           handleDrilldown({
@@ -1881,7 +1904,7 @@ export default function AnalyticsDashboard({
                       />
                       <Bar
                         dataKey="Feedback Form"
-                        fill="#f59e0b"
+                        fill="#0284c7"
                         stackId="ch"
                         onClick={() =>
                           handleDrilldown({
@@ -1908,7 +1931,7 @@ export default function AnalyticsDashboard({
         {/* 6. HELPDESK SUMMARY SHEET VISUALS */}
         {/* ========================================================================= */}
         <div className="space-y-6">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+          <div className="flex items-center justify-between pb-2 border-b border-emerald-900/40">
             <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
               <ListFilter className="w-4 h-4 text-emerald-400" />
               Helpdesk Summary Distributions (From Summary Sheet in Excel)
@@ -1921,7 +1944,7 @@ export default function AnalyticsDashboard({
             <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700/80 space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                  <Tag className="w-3.5 h-3.5 text-indigo-400" />
+                  <Tag className="w-3.5 h-3.5 text-emerald-400" />
                   Category Distribution (Chart 5)
                 </h4>
               </div>
@@ -1994,7 +2017,7 @@ export default function AnalyticsDashboard({
                         label: `Site / Floor: ${site.name}`,
                       })
                     }
-                    className="p-2 rounded-xl bg-slate-900/70 border border-slate-700/60 hover:border-cyan-500 cursor-pointer transition space-y-1"
+                    className="p-2 rounded-xl bg-slate-900/70 border border-slate-700/60 hover:border-emerald-500 cursor-pointer transition space-y-1"
                   >
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-semibold text-slate-200">{site.name}</span>
@@ -2004,7 +2027,7 @@ export default function AnalyticsDashboard({
                     </div>
                     <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
                       <div
-                        className="bg-cyan-500 h-1.5 rounded-full"
+                        className="bg-emerald-500 h-1.5 rounded-full"
                         style={{ width: `${site.percentage}%` }}
                       ></div>
                     </div>
@@ -2112,7 +2135,7 @@ export default function AnalyticsDashboard({
                     />
                     <Bar
                       dataKey="Resolved"
-                      fill="#10b981"
+                      fill="#006A4E"
                       stackId="st"
                       onClick={() =>
                         handleDrilldown({
@@ -2125,7 +2148,7 @@ export default function AnalyticsDashboard({
                     />
                     <Bar
                       dataKey="Pending"
-                      fill="#ef4444"
+                      fill="#D40026"
                       stackId="st"
                       onClick={() =>
                         handleDrilldown({
@@ -2151,9 +2174,9 @@ export default function AnalyticsDashboard({
         {/* 7. MORE VISUALS: SLA COMPLIANCE, PRIORITY & TOP TICKET RAISERS */}
         {/* ========================================================================= */}
         <div className="space-y-6">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+          <div className="flex items-center justify-between pb-2 border-b border-emerald-900/40">
             <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-amber-400" />
+              <Sparkles className="w-4 h-4 text-emerald-400" />
               Operational Performance & SLA Compliance Intelligence
             </h3>
             <span className="text-xs text-slate-400">Click any chart item to view data</span>
@@ -2212,7 +2235,7 @@ export default function AnalyticsDashboard({
             {/* Visual 10: SLA TAT Compliance */}
             <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700/80 space-y-3">
               <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                <Clock className="w-3.5 h-3.5 text-emerald-400" />
                 SLA / TAT On-Time Compliance
               </h4>
               <div className="h-48 w-full">
@@ -2263,7 +2286,7 @@ export default function AnalyticsDashboard({
             <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700/80 space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                  <Users className="w-3.5 h-3.5 text-purple-400" />
+                  <Users className="w-3.5 h-3.5 text-emerald-400" />
                   Top Ticket Raisers (Logged By)
                 </h4>
                 <span className="text-[10px] text-slate-400">Tickets Logged</span>
@@ -2289,7 +2312,7 @@ export default function AnalyticsDashboard({
                     />
                     <Bar
                       dataKey="count"
-                      fill="#8b5cf6"
+                      fill="#006A4E"
                       radius={[0, 6, 6, 0]}
                       onClick={(entry) =>
                         handleDrilldown({
@@ -2299,7 +2322,14 @@ export default function AnalyticsDashboard({
                         })
                       }
                       className="cursor-pointer"
-                    />
+                    >
+                      {topRaisersData.map((_, idx) => (
+                        <Cell
+                          key={idx}
+                          fill={idx === 0 ? '#004B37' : idx < 3 ? '#006A4E' : '#10b981'}
+                        />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -2310,10 +2340,10 @@ export default function AnalyticsDashboard({
         {/* ========================================================================= */}
         {/* 8. YEAR-OVER-YEAR (YOY) 2026 vs 2025 COMPARISON CARD */}
         {/* ========================================================================= */}
-        <div className="bg-slate-800/60 rounded-2xl p-4 border border-slate-700/60 flex flex-wrap items-center justify-between gap-4">
+        <div className="bg-[#0c241c]/60 rounded-2xl p-4 border border-emerald-900/50 flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-0.5">
             <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-amber-400" />
+              <Sparkles className="w-4 h-4 text-emerald-400" />
               Year-over-Year Snapshot (2026 vs 2025)
             </span>
             <p className="text-[11px] text-slate-400">
@@ -2332,7 +2362,7 @@ export default function AnalyticsDashboard({
             </div>
             <button
               onClick={() => handleYearToggle(activeYear === '2026' ? '2025' : '2026')}
-              className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 underline"
+              className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 underline"
             >
               Switch to {activeYear === '2026' ? '2025' : '2026'}
             </button>
