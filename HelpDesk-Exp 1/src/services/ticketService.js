@@ -18,6 +18,7 @@ import {
   sanitizeSiteValue,
   VALID_REQUEST_CATEGORIES,
   deduplicateTickets,
+  identifyDuplicateTicketIds,
   getTicketUniqueKey,
   detectTicketYear,
 } from '../utils/schema';
@@ -230,7 +231,7 @@ export function subscribeTickets(onSuccess, onError) {
   // 2. Check IndexedDB cache asynchronously
   getCachedTicketsIDB().then((cached) => {
     if (Array.isArray(cached) && cached.length > 0) {
-      localTickets = cached;
+      localTickets = deduplicateTickets(cached);
       onSuccess([...localTickets]);
     }
   });
@@ -241,6 +242,18 @@ export function subscribeTickets(onSuccess, onError) {
       try {
         const data = await fetchAllSupabaseTickets();
         if (data && data.length > 0) {
+          // Identify duplicate rows in Supabase and purge them in the background
+          const dupIds = identifyDuplicateTicketIds(data);
+          if (dupIds.length > 0 && isSupabaseConfigValid && supabase) {
+            (async () => {
+              for (let i = 0; i < dupIds.length; i += 200) {
+                const chunk = dupIds.slice(i, i + 200);
+                await supabase.from('tickets').delete().in('id', chunk);
+              }
+              console.info(`Successfully purged ${dupIds.length} duplicate rows from Supabase.`);
+            })().catch(console.warn);
+          }
+
           const sanitized = data
             .filter((t) => !isInvalidPivotOrSummaryRow(t))
             .map((t) => {
@@ -254,8 +267,8 @@ export function subscribeTickets(onSuccess, onError) {
               }
               return t;
             });
-          localTickets = sanitized;
-          setCachedTicketsIDB(sanitized);
+          localTickets = deduplicateTickets(sanitized);
+          setCachedTicketsIDB(localTickets);
           notifyLocalListeners();
         } else {
           // If Supabase table is empty, seed with full dataset
@@ -275,8 +288,8 @@ export function subscribeTickets(onSuccess, onError) {
         async () => {
           const data = await fetchAllSupabaseTickets();
           if (data && data.length > 0) {
-            localTickets = data;
-            setCachedTicketsIDB(data);
+            localTickets = deduplicateTickets(data);
+            setCachedTicketsIDB(localTickets);
             notifyLocalListeners();
           }
         }
@@ -359,6 +372,16 @@ export async function refreshTickets() {
     try {
       const data = await fetchAllSupabaseTickets();
       if (data && data.length > 0) {
+        const dupIds = identifyDuplicateTicketIds(data);
+        if (dupIds.length > 0) {
+          (async () => {
+            for (let i = 0; i < dupIds.length; i += 200) {
+              const chunk = dupIds.slice(i, i + 200);
+              await supabase.from('tickets').delete().in('id', chunk);
+            }
+            console.info(`Refreshed & purged ${dupIds.length} duplicate rows from Supabase.`);
+          })().catch(console.warn);
+        }
         localTickets = deduplicateTickets(data);
         setCachedTicketsIDB(localTickets);
         notifyLocalListeners();
@@ -370,7 +393,7 @@ export async function refreshTickets() {
   }
   const cached = await getCachedTicketsIDB();
   if (Array.isArray(cached) && cached.length > 0) {
-    localTickets = cached;
+    localTickets = deduplicateTickets(cached);
     notifyLocalListeners();
     return localTickets;
   }
@@ -742,9 +765,21 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
  */
 export function purgeAllDuplicates() {
   const originalCount = localTickets.length;
+  const dupIds = identifyDuplicateTicketIds(localTickets);
   localTickets = deduplicateTickets(localTickets);
   const removed = originalCount - localTickets.length;
   setCachedTicketsIDB(localTickets);
   notifyLocalListeners();
+
+  if (dupIds.length > 0 && isSupabaseConfigValid && supabase) {
+    (async () => {
+      for (let i = 0; i < dupIds.length; i += 200) {
+        const chunk = dupIds.slice(i, i + 200);
+        await supabase.from('tickets').delete().in('id', chunk);
+      }
+      console.info(`Purged ${dupIds.length} duplicate rows from Supabase.`);
+    })().catch(console.warn);
+  }
+
   return removed;
 }

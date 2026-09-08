@@ -44,7 +44,12 @@ import {
   ListFilter,
   Eye,
 } from 'lucide-react';
-import { detectTicketYear, compareMonthsChronologically, VALID_REQUEST_CATEGORIES } from '../utils/schema';
+import {
+  detectTicketYear,
+  compareMonthsChronologically,
+  VALID_REQUEST_CATEGORIES,
+  deduplicateTickets,
+} from '../utils/schema';
 
 const STATUS_COLORS = {
   Resolved: '#10b981',
@@ -218,20 +223,25 @@ export default function AnalyticsDashboard({
     ]
   );
 
-  // Year tickets count
-  const count2026 = useMemo(() => {
-    return allTickets.filter((t) => detectTicketYear(t) === '2026').length;
+  // Guarantee strictly unique records with zero duplicate or noise rows
+  const cleanTickets = useMemo(() => {
+    return deduplicateTickets(allTickets);
   }, [allTickets]);
 
+  // Year tickets count
+  const count2026 = useMemo(() => {
+    return cleanTickets.filter((t) => detectTicketYear(t) === '2026').length;
+  }, [cleanTickets]);
+
   const count2025 = useMemo(() => {
-    return allTickets.filter((t) => detectTicketYear(t) === '2025').length;
-  }, [allTickets]);
+    return cleanTickets.filter((t) => detectTicketYear(t) === '2025').length;
+  }, [cleanTickets]);
 
   // Dataset filtered by active year first
   const yearDataset = useMemo(() => {
-    if (activeYear === 'all') return allTickets;
-    return allTickets.filter((t) => detectTicketYear(t) === activeYear);
-  }, [allTickets, activeYear]);
+    if (activeYear === 'all') return cleanTickets;
+    return cleanTickets.filter((t) => detectTicketYear(t) === activeYear);
+  }, [cleanTickets, activeYear]);
 
   // Extract distinct short months in current year
   const availableMonths = useMemo(() => {
@@ -246,7 +256,7 @@ export default function AnalyticsDashboard({
   // Extract all categories including F&B and any custom categories in the dataset
   const allCategories = useMemo(() => {
     const set = new Set(VALID_REQUEST_CATEGORIES);
-    allTickets.forEach((t) => {
+    cleanTickets.forEach((t) => {
       const c = (t['Request category'] || '').trim();
       if (
         c &&
@@ -258,7 +268,7 @@ export default function AnalyticsDashboard({
       }
     });
     return Array.from(set);
-  }, [allTickets]);
+  }, [cleanTickets]);
 
   // Filtered dataset with all filter bar constraints
   const filteredDataset = useMemo(() => {
@@ -853,7 +863,7 @@ export default function AnalyticsDashboard({
                     activeYear === 'all' ? 'text-indigo-100' : 'text-slate-400'
                   }`}
                 >
-                  Combined ({allTickets.length} tickets)
+                  Combined ({cleanTickets.length} tickets)
                 </div>
               </div>
             </button>

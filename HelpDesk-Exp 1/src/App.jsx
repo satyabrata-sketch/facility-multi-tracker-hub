@@ -42,7 +42,7 @@ export default function App() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('tracker'); // 'tracker' | 'analytics'
-  const [selectedYear, setSelectedYear] = useState('all'); // Show ALL imported tickets by default!
+  const [selectedYear, setSelectedYear] = useState('2026'); // Default to active operational year (2026)
   const [activeVisualFilter, setActiveVisualFilter] = useState(null); // { type, value, label }
 
   // View Mode: 'grid' (main screen) | 'ticketPage' (dedicated full-page creation/edit)
@@ -267,6 +267,18 @@ export default function App() {
       return true;
     });
   }, [tickets, selectedYear, activeVisualFilter]);
+
+  // Aggregate year counts for clear and transparent Navbar tabs
+  const yearCounts = useMemo(() => {
+    let y26 = 0;
+    let y25 = 0;
+    tickets.forEach((t) => {
+      const yr = detectTicketYear(t);
+      if (yr === '2026') y26++;
+      else if (yr === '2025') y25++;
+    });
+    return { y2026: y26, y2025: y25, total: tickets.length };
+  }, [tickets]);
 
   // Add or Update Ticket
   const handleSaveTicket = async (ticketData) => {
@@ -542,6 +554,7 @@ export default function App() {
         onOpenUsers={() => setUserModalOpen(true)}
         ticketCount={displayTickets.length}
         selectedYear={selectedYear}
+        yearCounts={yearCounts}
         onSelectYear={(yr) => {
           setSelectedYear(yr);
           setActiveVisualFilter(null);

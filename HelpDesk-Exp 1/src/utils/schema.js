@@ -213,6 +213,40 @@ export function deduplicateTickets(ticketList) {
   return Array.from(map.values());
 }
 
+/**
+ * Identifies IDs of duplicate and invalid rows that can be safely purged from the database
+ */
+export function identifyDuplicateTicketIds(ticketList) {
+  if (!Array.isArray(ticketList) || ticketList.length === 0) return [];
+  const map = new Map();
+  const duplicateIds = [];
+
+  ticketList.forEach((t) => {
+    if (!t) return;
+    if (isInvalidPivotOrSummaryRow(t)) {
+      if (t.id) duplicateIds.push(String(t.id));
+      return;
+    }
+    const key = getTicketUniqueKey(t);
+    if (!key) {
+      if (t.id) duplicateIds.push(String(t.id));
+      return;
+    }
+
+    if (!map.has(key)) {
+      map.set(key, t);
+    } else {
+      const existing = map.get(key);
+      // Whichever duplicate record is not retained is queued for purge
+      if (t.id && existing.id && String(t.id) !== String(existing.id)) {
+        duplicateIds.push(String(t.id));
+      }
+    }
+  });
+
+  return duplicateIds;
+}
+
 export const COLUMNS_SCHEMA = [
   {
     key: 'Sr no.',

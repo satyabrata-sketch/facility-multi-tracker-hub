@@ -31,6 +31,7 @@ export default function Navbar({
   ticketCount,
   selectedYear,
   onSelectYear,
+  yearCounts,
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isAdmin = Boolean(
@@ -73,8 +74,9 @@ export default function Navbar({
                       ? 'bg-emerald-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                   }`}
+                  title="Filter to FY 2025-26 tickets"
                 >
-                  2026 (FY 25-26)
+                  2026 (FY 25-26){yearCounts?.y2026 ? ` (${yearCounts.y2026})` : ''}
                 </button>
                 <button
                   type="button"
@@ -84,8 +86,9 @@ export default function Navbar({
                       ? 'bg-emerald-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                   }`}
+                  title="Filter to FY 2024-25 tickets"
                 >
-                  2025 (FY 24-25)
+                  2025 (FY 24-25){yearCounts?.y2025 ? ` (${yearCounts.y2025})` : ''}
                 </button>
                 <button
                   type="button"
@@ -95,8 +98,9 @@ export default function Navbar({
                       ? 'bg-emerald-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                   }`}
+                  title="Show all multi-year records combined"
                 >
-                  All ({ticketCount})
+                  All ({yearCounts?.total ?? ticketCount})
                 </button>
               </div>
             </div>
