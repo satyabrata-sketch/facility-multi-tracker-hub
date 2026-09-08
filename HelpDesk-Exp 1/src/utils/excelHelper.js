@@ -284,7 +284,7 @@ function buildWorksheet(workbook, sheetTitle, ticketsList) {
         cell.dataValidation = {
           type: 'list',
           allowBlank: true,
-          formulae: ['"Housekeeping,HVAC,E&M,Event,EMPLOYEE ACCESS,Locker request"'],
+          formulae: [`"${VALID_REQUEST_CATEGORIES.join(',')}"`],
         };
       } else if (colKey === 'Request Via ') {
         cell.dataValidation = {

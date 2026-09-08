@@ -43,7 +43,7 @@ import {
   ChevronRight,
   ListFilter,
 } from 'lucide-react';
-import { detectTicketYear, compareMonthsChronologically } from '../utils/schema';
+import { detectTicketYear, compareMonthsChronologically, VALID_REQUEST_CATEGORIES } from '../utils/schema';
 
 const STATUS_COLORS = {
   Resolved: '#10b981',
@@ -135,6 +135,23 @@ export default function AnalyticsDashboard({
     });
     return Array.from(set).sort(compareMonthsChronologically);
   }, [yearDataset]);
+
+  // Extract all categories including F&B and any custom categories in the dataset
+  const allCategories = useMemo(() => {
+    const set = new Set(VALID_REQUEST_CATEGORIES);
+    allTickets.forEach((t) => {
+      const c = (t['Request category'] || '').trim();
+      if (
+        c &&
+        !c.toLowerCase().includes('total') &&
+        !c.toLowerCase().includes('label') &&
+        !c.toLowerCase().includes('multiple')
+      ) {
+        set.add(c);
+      }
+    });
+    return Array.from(set);
+  }, [allTickets]);
 
   const activeFilterCount = [
     siteFilter !== 'all',
@@ -300,7 +317,7 @@ export default function AnalyticsDashboard({
   // Excel Chart 1: Request Category Month Wise (from calculation sheet)
   const categoryMonthWiseData = useMemo(() => {
     const monthMap = {};
-    const categories = ['Housekeeping', 'HVAC', 'E&M', 'EMPLOYEE ACCESS', 'Event', 'Locker request'];
+    const categories = ['Housekeeping', 'HVAC', 'E&M', 'EMPLOYEE ACCESS', 'Event', 'F&B', 'Locker request'];
 
     filteredDataset.forEach((t) => {
       const m = (t['Month '] || 'Other').trim();
@@ -792,12 +809,11 @@ export default function AnalyticsDashboard({
                 className="w-full text-xs px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 focus:ring-1 focus:ring-indigo-500"
               >
                 <option value="all">All Categories</option>
-                <option value="Housekeeping">Housekeeping</option>
-                <option value="HVAC">HVAC</option>
-                <option value="E&M">E&M</option>
-                <option value="Event">Event</option>
-                <option value="EMPLOYEE ACCESS">EMPLOYEE ACCESS</option>
-                <option value="Locker request">Locker request</option>
+                {allCategories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -1463,6 +1479,19 @@ export default function AnalyticsDashboard({
                             type: 'category',
                             value: 'Event',
                             label: 'Category: Event',
+                          })
+                        }
+                        className="cursor-pointer"
+                      />
+                      <Bar
+                        dataKey="F&B"
+                        stackId="a"
+                        fill="#f97316"
+                        onClick={() =>
+                          handleDrilldown({
+                            type: 'category',
+                            value: 'F&B',
+                            label: 'Category: F&B',
                           })
                         }
                         className="cursor-pointer"

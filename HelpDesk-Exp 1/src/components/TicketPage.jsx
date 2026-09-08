@@ -15,7 +15,7 @@ import {
   User,
   Sparkles,
 } from 'lucide-react';
-import { COLUMNS_SCHEMA, createEmptyTicket, getCurrentShortMonth } from '../utils/schema';
+import { COLUMNS_SCHEMA, createEmptyTicket, getCurrentShortMonth, VALID_REQUEST_CATEGORIES } from '../utils/schema';
 
 export default function TicketPage({
   initialTicket = null,
@@ -391,14 +391,7 @@ export default function TicketPage({
                   onChange={(e) => handleChange('Request category', e.target.value)}
                   className="w-full text-sm px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition font-medium"
                 >
-                  {[
-                    'Housekeeping',
-                    'HVAC',
-                    'E&M',
-                    'Event',
-                    'EMPLOYEE ACCESS',
-                    'Locker request',
-                  ].map((cat) => (
+                  {VALID_REQUEST_CATEGORIES.map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
                     </option>

@@ -93,6 +93,13 @@ export default function App() {
             site = sanitizeSiteValue(site);
           }
 
+          if (!cat || cat === 'Housekeeping') {
+            const d = (t['Discription '] || '').toLowerCase();
+            if (d.includes('food') || d.includes('catering') || d.includes('breakfast') || d.includes('lunch')) {
+              cat = 'F&B';
+            }
+          }
+
           t['Site '] = site;
           t['Request category'] = cat || 'Housekeeping';
           return t;

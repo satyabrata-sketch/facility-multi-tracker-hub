@@ -38,6 +38,12 @@ function getInitialLocalTickets() {
           } else {
             t['Site '] = sanitizeSiteValue(s);
           }
+          if (!c || c === 'Housekeeping') {
+            const d = (t['Discription '] || '').toLowerCase();
+            if (d.includes('food') || d.includes('catering') || d.includes('breakfast') || d.includes('lunch')) {
+              t['Request category'] = 'F&B';
+            }
+          }
           if (!t.id) {
             t.id = t['Sr no.'] ? `sr-${t['Sr no.']}` : `t-${idx + 1}`;
           }

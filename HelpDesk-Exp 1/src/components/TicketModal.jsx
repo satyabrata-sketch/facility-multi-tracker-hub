@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, AlertCircle, FileText } from 'lucide-react';
-import { COLUMNS_SCHEMA, createEmptyTicket } from '../utils/schema';
+import { COLUMNS_SCHEMA, createEmptyTicket, VALID_REQUEST_CATEGORIES } from '../utils/schema';
 
 export default function TicketModal({ isOpen, onClose, onSave, initialTicket = null }) {
   const [formData, setFormData] = useState(createEmptyTicket());
@@ -254,14 +254,7 @@ export default function TicketModal({ isOpen, onClose, onSave, initialTicket = n
                   onChange={(e) => handleChange('Request category', e.target.value)}
                   className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
                 >
-                  {[
-                    'Housekeeping',
-                    'HVAC',
-                    'E&M',
-                    'Event',
-                    'EMPLOYEE ACCESS',
-                    'Locker request',
-                  ].map((cat) => (
+                  {VALID_REQUEST_CATEGORIES.map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
                     </option>

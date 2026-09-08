@@ -71,6 +71,7 @@ export const VALID_REQUEST_CATEGORIES = [
   'E&M',
   'EMPLOYEE ACCESS',
   'Event',
+  'F&B',
   'Locker request',
 ];
 
@@ -249,8 +250,9 @@ export const COLUMNS_SCHEMA = [
       'Housekeeping',
       'HVAC',
       'E&M',
-      'Event',
       'EMPLOYEE ACCESS',
+      'Event',
+      'F&B',
       'Locker request',
     ],
     placeholder: 'Select category',
