@@ -44,13 +44,10 @@ export default function Navbar({
         <div className="flex items-center justify-between h-16">
           {/* Brand Logo & Year Switcher */}
           <div className="flex items-center space-x-3">
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <span className="h-9 sm:h-10 px-2.5 rounded-xl bg-[#003F2D] border border-emerald-500/40 flex items-center justify-center shadow-md text-emerald-300 font-black text-xs sm:text-sm tracking-wider">
+            <div className="flex items-center flex-shrink-0">
+              <span className="h-9 sm:h-10 px-3.5 rounded-xl bg-gradient-to-br from-[#003F2D] to-[#005A3E] border border-emerald-500/40 flex items-center justify-center shadow-md text-emerald-200 font-black text-sm sm:text-base tracking-wider gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 CBRE
-              </span>
-              <span className="text-slate-500 text-xs font-bold">×</span>
-              <span className="h-9 sm:h-10 px-2 rounded-xl bg-[#D40026] flex items-center justify-center shadow-md text-white font-black text-xs sm:text-sm tracking-wider gap-0.5">
-                <span className="text-[10px]">★</span>NAB
               </span>
             </div>
             <div>

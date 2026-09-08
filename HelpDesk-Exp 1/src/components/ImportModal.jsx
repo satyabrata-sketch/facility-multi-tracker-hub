@@ -13,7 +13,7 @@ import {
 import { getExcelSheets, parseSheetToTickets } from '../utils/excelHelper';
 import { batchImportTickets } from '../services/ticketService';
 import { sampleTickets } from '../data/sampleTickets';
-import { COLUMNS_SCHEMA } from '../utils/schema';
+import { COLUMNS_SCHEMA, deduplicateTickets } from '../utils/schema';
 
 export default function ImportModal({
   isOpen,
@@ -36,7 +36,22 @@ export default function ImportModal({
 
   if (!isOpen) return null;
 
-  const parseWithSettings = (wb, sheet, skipDups) => {
+  const parseWithSettings = (wb, sheet, skipDups, availableSheets = sheetNames) => {
+    if (sheet === '__ALL_SHEETS__') {
+      let combined = [];
+      let totalDups = 0;
+      const targetSheets = availableSheets.filter((s) => s !== '__ALL_SHEETS__');
+      targetSheets.forEach((s) => {
+        try {
+          const res = parseSheetToTickets(wb, s, existingTickets, { skipExisting: skipDups });
+          combined = combined.concat(res.tickets);
+          totalDups += res.duplicatesFiltered;
+        } catch (e) {
+          console.warn(`Error parsing sheet ${s}:`, e);
+        }
+      });
+      return { tickets: deduplicateTickets(combined), duplicatesFiltered: totalDups };
+    }
     return parseSheetToTickets(
       wb,
       sheet,
@@ -52,32 +67,34 @@ export default function ImportModal({
     setError(null);
     setFile(selected);
     try {
-      const { workbook, sheetNames } = await getExcelSheets(selected);
+      const { workbook, sheetNames: rawSheetNames } = await getExcelSheets(selected);
       setWorkbook(workbook);
 
       // Strictly filter ONLY genuine ticket data sheets; exclude pivot tables, calculations, dashboards, and scrap sheets!
-      const validTicketSheets = sheetNames.filter((s) => {
+      const validTicketSheets = rawSheetNames.filter((s) => {
         const lower = s.toLowerCase().trim();
         if (/summary|calc|dash|pivot|mylist|sheet[0-9]/i.test(lower)) return false;
         return true;
       });
 
-      const eligibleSheets = validTicketSheets.length > 0 ? validTicketSheets : sheetNames;
-      setSheetNames(eligibleSheets);
+      const eligibleSheets = validTicketSheets.length > 0 ? validTicketSheets : rawSheetNames;
+      const combinedOptions =
+        eligibleSheets.length > 1 ? ['__ALL_SHEETS__', ...eligibleSheets] : eligibleSheets;
+      setSheetNames(combinedOptions);
 
-      // Prioritize current year ticket sheet (e.g. Helpdesk -2026)
+      // Prioritize combined or current year ticket sheet
       const defaultSheet =
-        eligibleSheets.find((s) => /2026/i.test(s)) ||
-        eligibleSheets.find((s) => /helpdesk\s*[-_]?\s*202/i.test(s)) ||
-        eligibleSheets.find((s) => /2025/i.test(s)) ||
-        eligibleSheets[0];
+        combinedOptions.find((s) => s === '__ALL_SHEETS__') ||
+        combinedOptions.find((s) => /2026/i.test(s)) ||
+        combinedOptions[0];
       setSelectedSheet(defaultSheet);
 
       // Parse with settings (default: import all unique rows in sheet)
       const { tickets, duplicatesFiltered: dupCount } = parseWithSettings(
         workbook,
         defaultSheet,
-        skipExistingDups
+        skipExistingDups,
+        combinedOptions
       );
       setParsedTickets(tickets);
       setDuplicatesFiltered(dupCount);
@@ -253,7 +270,7 @@ export default function ImportModal({
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-200">
                     <span className="text-xs text-slate-500">
-                      Want to load the 500 deduplicated records from your Excel file?
+                      Want to load all 11,600+ pre-parsed tickets directly?
                     </span>
                     <button
                       type="button"
@@ -262,7 +279,7 @@ export default function ImportModal({
                       className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
                     >
                       <Database className="w-3.5 h-3.5" />
-                      Load 500 Pre-Parsed Excel Tickets
+                      Load All Multi-Year Excel Tickets (11,600+)
                     </button>
                   </div>
                 </div>
@@ -294,7 +311,7 @@ export default function ImportModal({
                       >
                         {sheetNames.map((s) => (
                           <option key={s} value={s}>
-                            {s}
+                            {s === '__ALL_SHEETS__' ? '★ All Sheets Combined (2026 & 2025)' : s}
                           </option>
                         ))}
                       </select>

@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, AlertCircle, FileText } from 'lucide-react';
-import { COLUMNS_SCHEMA, createEmptyTicket, VALID_REQUEST_CATEGORIES } from '../utils/schema';
+import { COLUMNS_SCHEMA, createEmptyTicket, VALID_REQUEST_CATEGORIES, normalizeTicketFields } from '../utils/schema';
 
 export default function TicketModal({ isOpen, onClose, onSave, initialTicket = null }) {
-  const [formData, setFormData] = useState(createEmptyTicket());
+  const [formData, setFormData] = useState(() => createEmptyTicket());
   const [errors, setErrors] = useState({});
   const isEdit = !!initialTicket;
 
   useEffect(() => {
     if (initialTicket) {
-      setFormData({ ...createEmptyTicket(), ...initialTicket });
+      setFormData(normalizeTicketFields({ ...createEmptyTicket(), ...initialTicket }));
     } else {
-      setFormData(createEmptyTicket());
+      setFormData(normalizeTicketFields(createEmptyTicket()));
     }
     setErrors({});
   }, [initialTicket, isOpen]);
@@ -19,10 +19,23 @@ export default function TicketModal({ isOpen, onClose, onSave, initialTicket = n
   if (!isOpen) return null;
 
   const handleChange = (key, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+    setFormData((prev) => {
+      const updated = {
+        ...prev,
+        [key]: value,
+      };
+      if (key === 'Action Taken ') updated['Action taken '] = value;
+      if (key === 'Action taken ') updated['Action Taken '] = value;
+      if (key === 'Discription ') updated['Description'] = value;
+      if (key === 'Description') updated['Discription '] = value;
+      if (key === 'Date close ') updated['Date close'] = value;
+      if (key === 'Date close') updated['Date close '] = value;
+      if (key === 'Resolved time') updated['Resolved time '] = value;
+      if (key === 'Resolved time ') updated['Resolved time'] = value;
+      if (key === 'Report Time') updated['Report time'] = value;
+      if (key === 'Report time') updated['Report Time'] = value;
+      return updated;
+    });
     if (errors[key]) {
       setErrors((prev) => ({ ...prev, [key]: null }));
     }
@@ -41,7 +54,7 @@ export default function TicketModal({ isOpen, onClose, onSave, initialTicket = n
       return;
     }
 
-    onSave(formData);
+    onSave(normalizeTicketFields(formData));
     onClose();
   };
 
@@ -424,7 +437,7 @@ export default function TicketModal({ isOpen, onClose, onSave, initialTicket = n
                 <textarea
                   rows={2}
                   placeholder="e.g. Informed HK team to check & clean / Tech team rectified..."
-                  value={formData['Action Taken '] || ''}
+                  value={formData['Action Taken '] || formData['Action taken '] || ''}
                   onChange={(e) => handleChange('Action Taken ', e.target.value)}
                   className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 />

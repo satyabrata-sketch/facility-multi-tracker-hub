@@ -175,6 +175,109 @@ export function getTicketUniqueKey(ticket) {
 }
 
 /**
+ * Normalizes all ticket fields across potential key casing, whitespace, and alias variants
+ */
+export function normalizeTicketFields(ticket) {
+  if (!ticket || typeof ticket !== 'object') return ticket;
+  const t = { ...ticket };
+
+  // Action Taken normalization (synchronize both 'Action Taken ' and 'Action taken ')
+  const actionVal = String(
+    t['Action Taken '] ||
+    t['Action taken '] ||
+    t['Action Taken'] ||
+    t['Action taken'] ||
+    t.action_taken ||
+    t.Action ||
+    t.action ||
+    ''
+  ).trim();
+  t['Action Taken '] = actionVal;
+  t['Action taken '] = actionVal;
+
+  // Description normalization (synchronize 'Discription ' and 'Description')
+  const descVal = String(
+    t['Discription '] ||
+    t['Description '] ||
+    t['Discription'] ||
+    t['Description'] ||
+    t.description ||
+    ''
+  ).trim();
+  t['Discription '] = descVal;
+  t['Description'] = descVal;
+
+  // Date Close normalization (synchronize 'Date close ' and 'Date close')
+  const dateCloseVal = String(
+    t['Date close '] ||
+    t['Date Close '] ||
+    t['Date close'] ||
+    t['Date Close'] ||
+    t.date_close ||
+    t['Close Date'] ||
+    ''
+  ).trim();
+  t['Date close '] = dateCloseVal;
+  t['Date close'] = dateCloseVal;
+
+  // Resolved Time normalization (synchronize 'Resolved time' and 'Resolved time ')
+  const resolvedTimeVal = String(
+    t['Resolved time'] ||
+    t['Resolved time '] ||
+    t['Resolved Time'] ||
+    t['Resolved Time '] ||
+    t.resolved_time ||
+    t['Close Time'] ||
+    ''
+  ).trim();
+  t['Resolved time'] = resolvedTimeVal;
+  t['Resolved time '] = resolvedTimeVal;
+
+  // Report Time normalization (synchronize 'Report Time' and 'Report time')
+  const reportTimeVal = String(
+    t['Report Time'] ||
+    t['Report time'] ||
+    t['Report Time '] ||
+    t['Report time '] ||
+    t.report_time ||
+    ''
+  ).trim();
+  t['Report Time'] = reportTimeVal;
+  t['Report time'] = reportTimeVal;
+
+  // Employee Name normalization
+  const empVal = String(
+    t['Employee Name '] ||
+    t['Employee Name'] ||
+    t['Employee name '] ||
+    t['Employee name'] ||
+    t.employee_name ||
+    ''
+  ).trim();
+  t['Employee Name '] = empVal;
+  t['Employee Name'] = empVal;
+
+  // Request Via normalization
+  const reqViaVal = String(
+    t['Request Via '] ||
+    t['Request Via'] ||
+    t['Request via '] ||
+    t['Request via'] ||
+    t.request_via ||
+    'In person'
+  ).trim();
+  t['Request Via '] = reqViaVal;
+
+  // Site normalization
+  t['Site '] = sanitizeSiteValue(t['Site '] || t['Site']);
+
+  // Year normalization
+  t.year = String(t.year || detectTicketYear(t));
+
+  return t;
+}
+
+/**
  * Deduplicates an array of tickets, merging updates and keeping only strictly unique records
  */
 export function deduplicateTickets(ticketList) {
@@ -182,8 +285,9 @@ export function deduplicateTickets(ticketList) {
 
   const map = new Map();
 
-  ticketList.forEach((t, idx) => {
-    if (!t || isInvalidPivotOrSummaryRow(t)) return;
+  ticketList.forEach((rawT, idx) => {
+    if (!rawT || isInvalidPivotOrSummaryRow(rawT)) return;
+    const t = normalizeTicketFields(rawT);
     const key = getTicketUniqueKey(t);
     if (!key) return;
 
@@ -198,15 +302,17 @@ export function deduplicateTickets(ticketList) {
         existing['Status '] === 'Closed' || existing['Status '] === 'Resolved';
       const isNewClosed = t['Status '] === 'Closed' || t['Status '] === 'Resolved';
 
-      const existingScore = (isExistingClosed ? 3 : 0) + (existing['Action Taken '] ? 1 : 0);
-      const newScore = (isNewClosed ? 3 : 0) + (t['Action Taken '] ? 1 : 0);
+      const existingScore =
+        (isExistingClosed ? 3 : 0) + (existing['Action Taken '] || existing['Action taken '] ? 1 : 0);
+      const newScore =
+        (isNewClosed ? 3 : 0) + (t['Action Taken '] || t['Action taken '] ? 1 : 0);
 
       const merged =
         newScore >= existingScore
           ? { ...existing, ...t, id: existing.id }
           : { ...t, ...existing, id: existing.id };
 
-      map.set(key, merged);
+      map.set(key, normalizeTicketFields(merged));
     }
   });
 

@@ -15,7 +15,7 @@ import {
   User,
   Sparkles,
 } from 'lucide-react';
-import { COLUMNS_SCHEMA, createEmptyTicket, getCurrentShortMonth, VALID_REQUEST_CATEGORIES } from '../utils/schema';
+import { COLUMNS_SCHEMA, createEmptyTicket, getCurrentShortMonth, VALID_REQUEST_CATEGORIES, normalizeTicketFields } from '../utils/schema';
 
 export default function TicketPage({
   initialTicket = null,
@@ -26,7 +26,7 @@ export default function TicketPage({
   const isEdit = !!initialTicket;
   const [formData, setFormData] = useState(() => {
     if (initialTicket) {
-      return { ...createEmptyTicket(), ...initialTicket };
+      return normalizeTicketFields({ ...createEmptyTicket(), ...initialTicket });
     }
     const empty = createEmptyTicket();
     const yr = selectedYear === '2025' ? '2025' : '2026';
@@ -36,7 +36,7 @@ export default function TicketPage({
       empty['Date '] = '2025-01-15';
       empty['Date close '] = '2025-01-15';
     }
-    return empty;
+    return normalizeTicketFields(empty);
   });
 
   const [errors, setErrors] = useState({});
@@ -44,15 +44,28 @@ export default function TicketPage({
 
   useEffect(() => {
     if (initialTicket) {
-      setFormData({ ...createEmptyTicket(), ...initialTicket });
+      setFormData(normalizeTicketFields({ ...createEmptyTicket(), ...initialTicket }));
     }
   }, [initialTicket]);
 
   const handleChange = (key, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+    setFormData((prev) => {
+      const updated = {
+        ...prev,
+        [key]: value,
+      };
+      if (key === 'Action Taken ') updated['Action taken '] = value;
+      if (key === 'Action taken ') updated['Action Taken '] = value;
+      if (key === 'Discription ') updated['Description'] = value;
+      if (key === 'Description') updated['Discription '] = value;
+      if (key === 'Date close ') updated['Date close'] = value;
+      if (key === 'Date close') updated['Date close '] = value;
+      if (key === 'Resolved time') updated['Resolved time '] = value;
+      if (key === 'Resolved time ') updated['Resolved time'] = value;
+      if (key === 'Report Time') updated['Report time'] = value;
+      if (key === 'Report time') updated['Report Time'] = value;
+      return updated;
+    });
     if (errors[key]) {
       setErrors((prev) => ({ ...prev, [key]: null }));
     }
@@ -92,7 +105,7 @@ export default function TicketPage({
 
     setIsSubmitting(true);
     try {
-      await onSave(formData);
+      await onSave(normalizeTicketFields(formData));
       onBack();
     } catch (err) {
       alert('Error saving ticket: ' + err.message);
@@ -329,9 +342,9 @@ export default function TicketPage({
                   Report Time
                 </label>
                 <input
-                  type="time"
-                  step="1"
-                  value={formData['Report Time'] || ''}
+                  type="text"
+                  placeholder="e.g. 08:24 AM or 14:30"
+                  value={formData['Report Time'] || formData['Report time'] || ''}
                   onChange={(e) => handleChange('Report Time', e.target.value)}
                   className="w-full text-sm px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
                 />
@@ -356,9 +369,9 @@ export default function TicketPage({
                   Resolved time
                 </label>
                 <input
-                  type="time"
-                  step="1"
-                  value={formData['Resolved time'] || ''}
+                  type="text"
+                  placeholder="e.g. 08:48 AM or 14:30"
+                  value={formData['Resolved time'] || formData['Resolved time '] || ''}
                   onChange={(e) => handleChange('Resolved time', e.target.value)}
                   className="w-full text-sm px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
                 />
@@ -570,7 +583,7 @@ export default function TicketPage({
                 <textarea
                   rows={3}
                   placeholder="e.g. Informed HK team to check & clean, technician rectified table..."
-                  value={formData['Action Taken '] || ''}
+                  value={formData['Action Taken '] || formData['Action taken '] || ''}
                   onChange={(e) => handleChange('Action Taken ', e.target.value)}
                   className="w-full text-sm px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
                 />

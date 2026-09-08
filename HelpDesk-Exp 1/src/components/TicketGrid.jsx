@@ -172,9 +172,26 @@ export default function TicketGrid({
 
       const ticketId = data.id || String(data['Sr no.']);
       const fieldKey = colDef.field;
+      const updates = { [fieldKey]: newValue };
+
+      if (fieldKey === 'Action Taken ') {
+        updates['Action taken '] = newValue;
+      }
+      if (fieldKey === 'Discription ') {
+        updates['Description'] = newValue;
+      }
+      if (fieldKey === 'Date close ') {
+        updates['Date close'] = newValue;
+      }
+      if (fieldKey === 'Resolved time') {
+        updates['Resolved time '] = newValue;
+      }
+      if (fieldKey === 'Report Time') {
+        updates['Report time'] = newValue;
+      }
 
       try {
-        await onUpdateTicket(ticketId, { [fieldKey]: newValue }, data);
+        await onUpdateTicket(ticketId, updates, data);
         showToast(`Saved "${colDef.headerName}"`);
       } catch (err) {
         console.error('Cell edit notice:', err);
@@ -246,6 +263,71 @@ export default function TicketGrid({
         baseCol.cellEditor = 'agSelectCellEditor';
         baseCol.cellEditorParams = {
           values: col.options,
+        };
+      }
+
+      if (col.key === 'Action Taken ') {
+        baseCol.valueGetter = (params) => {
+          if (!params.data) return '';
+          return params.data['Action Taken '] || params.data['Action taken '] || params.data['Action Taken'] || params.data['Action taken'] || '';
+        };
+        baseCol.valueSetter = (params) => {
+          if (!params.data) return false;
+          params.data['Action Taken '] = params.newValue;
+          params.data['Action taken '] = params.newValue;
+          return true;
+        };
+      }
+
+      if (col.key === 'Discription ') {
+        baseCol.valueGetter = (params) => {
+          if (!params.data) return '';
+          return params.data['Discription '] || params.data['Description'] || params.data['Description '] || '';
+        };
+        baseCol.valueSetter = (params) => {
+          if (!params.data) return false;
+          params.data['Discription '] = params.newValue;
+          params.data['Description'] = params.newValue;
+          return true;
+        };
+      }
+
+      if (col.key === 'Date close ') {
+        baseCol.valueGetter = (params) => {
+          if (!params.data) return '';
+          return params.data['Date close '] || params.data['Date close'] || params.data['Date Close '] || '';
+        };
+        baseCol.valueSetter = (params) => {
+          if (!params.data) return false;
+          params.data['Date close '] = params.newValue;
+          params.data['Date close'] = params.newValue;
+          return true;
+        };
+      }
+
+      if (col.key === 'Resolved time') {
+        baseCol.valueGetter = (params) => {
+          if (!params.data) return '';
+          return params.data['Resolved time'] || params.data['Resolved time '] || params.data['Resolved Time'] || params.data['Close Time'] || '';
+        };
+        baseCol.valueSetter = (params) => {
+          if (!params.data) return false;
+          params.data['Resolved time'] = params.newValue;
+          params.data['Resolved time '] = params.newValue;
+          return true;
+        };
+      }
+
+      if (col.key === 'Report Time') {
+        baseCol.valueGetter = (params) => {
+          if (!params.data) return '';
+          return params.data['Report Time'] || params.data['Report time'] || params.data['Report Time '] || '';
+        };
+        baseCol.valueSetter = (params) => {
+          if (!params.data) return false;
+          params.data['Report Time'] = params.newValue;
+          params.data['Report time'] = params.newValue;
+          return true;
         };
       }
 

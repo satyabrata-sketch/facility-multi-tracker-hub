@@ -10,6 +10,7 @@ import {
   getTicketUniqueKey,
   deduplicateTickets,
   compareMonthsChronologically,
+  normalizeTicketFields,
 } from './schema';
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -49,9 +50,9 @@ export function formatShortMonth(raw, fallbackYear = '26') {
 }
 
 /**
- * Converts Excel serial date to YYYY-MM-DD
+ * Converts Excel serial date or date string to YYYY-MM-DD without timezone shifts
  */
-export function formatExcelDate(raw) {
+export function formatExcelDate(raw, fallbackYear = '2026') {
   if (!raw) return '';
   if (typeof raw === 'number') {
     const parsed = XLSX.SSF.parse_date_code(raw);
@@ -63,17 +64,55 @@ export function formatExcelDate(raw) {
     }
   }
   if (raw instanceof Date) {
-    return raw.toISOString().split('T')[0];
+    const y = raw.getFullYear();
+    const m = String(raw.getMonth() + 1).padStart(2, '0');
+    const d = String(raw.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
-  if (typeof raw === 'string') {
-    const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (match) return match[1];
-    const parsed = new Date(raw);
-    if (!isNaN(parsed.getTime())) {
-      return parsed.toISOString().split('T')[0];
+  const str = String(raw).trim();
+  if (!str) return '';
+
+  // Already YYYY-MM-DD
+  const mIso = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (mIso) {
+    return `${mIso[1]}-${mIso[2].padStart(2, '0')}-${mIso[3].padStart(2, '0')}`;
+  }
+
+  // M/D/YY or M/D/YYYY (e.g. "1/2/26", "4/30/26", "9/29/25")
+  const mSlash = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (mSlash) {
+    let y = parseInt(mSlash[3], 10);
+    if (y < 100) y += 2000;
+    const m = String(mSlash[1]).padStart(2, '0');
+    const d = String(mSlash[2]).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  // D-MMM or D-MMM-YY (e.g. "2-Jan", "30-Apr", "29-Sep-25")
+  const mDMMM = str.match(/^(\d{1,2})-([A-Za-z]{3})(?:-(\d{2,4}))?$/);
+  if (mDMMM) {
+    const d = String(mDMMM[1]).padStart(2, '0');
+    const mIdx = MONTH_NAMES.findIndex(
+      (name) => name.toLowerCase() === mDMMM[2].toLowerCase()
+    );
+    if (mIdx !== -1) {
+      const m = String(mIdx + 1).padStart(2, '0');
+      let y = mDMMM[3] ? parseInt(mDMMM[3], 10) : parseInt(fallbackYear, 10);
+      if (y < 100) y += 2000;
+      return `${y}-${m}-${d}`;
     }
   }
-  return String(raw);
+
+  // DD/MM/YYYY
+  const mDot = str.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
+  if (mDot) {
+    const d = String(mDot[1]).padStart(2, '0');
+    const m = String(mDot[2]).padStart(2, '0');
+    const y = mDot[3];
+    return `${y}-${m}-${d}`;
+  }
+
+  return str;
 }
 
 /**
@@ -88,18 +127,143 @@ export function formatTatValue(raw) {
 }
 
 /**
- * Converts Excel serial time or fraction of day to HH:MM:SS
+ * Converts Excel serial time fraction or string time to clean 12-hour AM/PM format (e.g. "08:24 AM")
  */
 export function formatExcelTime(raw) {
   if (raw === undefined || raw === null || raw === '') return '';
-  if (typeof raw === 'number' && raw < 1) {
+  if (typeof raw === 'number') {
     const totalSecs = Math.round(raw * 86400);
-    const hrs = Math.floor(totalSecs / 3600);
+    const hrs24 = Math.floor(totalSecs / 3600);
     const mins = Math.floor((totalSecs % 3600) / 60);
-    const secs = totalSecs % 60;
-    return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    const ampm = hrs24 >= 12 ? 'PM' : 'AM';
+    const hrs12 = hrs24 % 12 || 12;
+    return `${String(hrs12).padStart(2, '0')}:${String(mins).padStart(2, '0')} ${ampm}`;
   }
-  return String(raw);
+  const str = String(raw).trim();
+  if (!str) return '';
+
+  // Matches "8:48AM", "08:24 AM", "1:42PM", "13:36"
+  const mAmPm = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?$/);
+  if (mAmPm) {
+    let h = parseInt(mAmPm[1], 10);
+    const m = mAmPm[2];
+    const ap = mAmPm[3] ? mAmPm[3].toUpperCase() : (h >= 12 ? 'PM' : 'AM');
+    if (!mAmPm[3] && h > 12) {
+      h = h - 12;
+    }
+    return `${String(h).padStart(2, '0')}:${m} ${ap}`;
+  }
+  return str;
+}
+
+/**
+ * Robustly extracts field value from ticket regardless of casing or space differences
+ */
+export function getTicketFieldValue(ticket, key) {
+  if (!ticket) return '';
+  if (ticket[key] !== undefined && ticket[key] !== null && String(ticket[key]).trim() !== '') {
+    return ticket[key];
+  }
+  if (key === 'Action Taken ') {
+    return (
+      ticket['Action Taken '] ||
+      ticket['Action taken '] ||
+      ticket['Action Taken'] ||
+      ticket['Action taken'] ||
+      ticket['action_taken'] ||
+      ticket['Action'] ||
+      ticket['action'] ||
+      ''
+    );
+  }
+  if (key === 'Discription ') {
+    return (
+      ticket['Discription '] ||
+      ticket['Description '] ||
+      ticket['Discription'] ||
+      ticket['Description'] ||
+      ticket['description'] ||
+      ticket['Details'] ||
+      ''
+    );
+  }
+  if (key === 'Date close ') {
+    return (
+      ticket['Date close '] ||
+      ticket['Date Close '] ||
+      ticket['Date close'] ||
+      ticket['Date Close'] ||
+      ticket['date_close'] ||
+      ticket['Close Date'] ||
+      ''
+    );
+  }
+  if (key === 'Resolved time') {
+    return (
+      ticket['Resolved time'] ||
+      ticket['Resolved time '] ||
+      ticket['Resolved Time'] ||
+      ticket['Resolved Time '] ||
+      ticket['resolved_time'] ||
+      ticket['Close Time'] ||
+      ticket['close_time'] ||
+      ''
+    );
+  }
+  if (key === 'Report Time') {
+    return (
+      ticket['Report Time'] ||
+      ticket['Report time'] ||
+      ticket['Report Time '] ||
+      ticket['Report time '] ||
+      ticket['report_time'] ||
+      ticket['Call In time'] ||
+      ticket['Call in time'] ||
+      ''
+    );
+  }
+  if (key === 'Employee Name ') {
+    return (
+      ticket['Employee Name '] ||
+      ticket['Employee Name'] ||
+      ticket['Employee name '] ||
+      ticket['Employee name'] ||
+      ticket['employee_name'] ||
+      ticket['Requestor'] ||
+      ''
+    );
+  }
+  if (key === 'Request Via ') {
+    return (
+      ticket['Request Via '] ||
+      ticket['Request Via'] ||
+      ticket['Request via '] ||
+      ticket['Request via'] ||
+      ticket['request_via'] ||
+      ''
+    );
+  }
+  if (key === 'is On TAT') {
+    return (
+      ticket['is On TAT'] ||
+      ticket['is on tat'] ||
+      ticket['is on TAT'] ||
+      ticket['Is On TAT'] ||
+      ticket['on_tat'] ||
+      'Yes'
+    );
+  }
+
+  // Fallback case-insensitive search
+  const cleanTarget = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+  for (const k of Object.keys(ticket)) {
+    if (k.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanTarget) {
+      if (ticket[k] !== undefined && ticket[k] !== null && String(ticket[k]).trim() !== '') {
+        return ticket[k];
+      }
+    }
+  }
+  return ticket[key] !== undefined && ticket[key] !== null ? ticket[key] : '';
 }
 
 const COLUMN_WIDTHS = {
@@ -186,7 +350,7 @@ function buildWorksheet(workbook, sheetTitle, ticketsList) {
     }
 
     COLUMNS_SCHEMA.forEach((c) => {
-      let val = t[c.key];
+      let val = getTicketFieldValue(t, c.key);
 
       if (c.key === 'Sr no.') {
         // Numeric Sr no. starting from 1 in order
@@ -198,6 +362,10 @@ function buildWorksheet(workbook, sheetTitle, ticketsList) {
         val = rawCategory || val || 'Housekeeping';
       } else if (c.key === 'Month ') {
         val = formatShortMonth(val, sheetTitle.includes('2025') ? '25' : '26');
+      } else if (c.key === 'Date ' || c.key === 'Date close ') {
+        val = formatExcelDate(val, sheetTitle.includes('2025') ? '2025' : '2026');
+      } else if (c.key === 'Report Time' || c.key === 'Resolved time') {
+        val = formatExcelTime(val);
       } else if (c.key === 'is On TAT') {
         val = formatTatValue(val);
       }
@@ -309,7 +477,7 @@ function buildWorksheet(workbook, sheetTitle, ticketsList) {
 
 /**
  * Builds the executive "Dashboard" worksheet inside the Excel export
- * Matching the exact look, metrics, breakdowns, and CBRE/NAB theme of the app
+ * Matching the exact look, metrics, breakdowns, and CBRE theme of the app
  */
 export function buildDashboardSheet(workbook, allTickets, selectedYear = 'all') {
   const targetYear = selectedYear === '2025' ? '2025' : selectedYear === 'all' ? 'all' : '2026';
@@ -335,12 +503,12 @@ export function buildDashboardSheet(workbook, allTickets, selectedYear = 'all') 
     { width: 20 }, // I
   ];
 
-  // Colors (CBRE Forest Green & NAB Star Red Theme)
+  // Colors (CBRE Corporate Forest Green & High-Priority Alert Theme)
   const CBRE_DARK_GREEN = 'FF003F2D';
   const CBRE_EMERALD = 'FF059669';
   const CBRE_LIGHT_BG = 'FFE8F5E9';
-  const NAB_RED = 'FFD40026';
-  const NAB_LIGHT_BG = 'FFFFEBEE';
+  const ALERT_RED = 'FFD40026';
+  const ALERT_LIGHT_BG = 'FFFFEBEE';
   const WHITE = 'FFFFFFFF';
   const SLATE_DARK = 'FF1E293B';
   const SLATE_BG = 'FFF8FAFC';
@@ -456,7 +624,7 @@ export function buildDashboardSheet(workbook, allTickets, selectedYear = 'all') 
   // 1. Title Banner
   ws.mergeCells('B2:I2');
   const titleCell = ws.getCell('B2');
-  titleCell.value = 'CBRE | NAB — FACILITY OPERATIONS & REACTIVE ANALYTICS DASHBOARD';
+  titleCell.value = 'CBRE FACILITY MANAGEMENT — OPERATIONS & REACTIVE ANALYTICS DASHBOARD';
   titleCell.font = { name: 'Segoe UI', size: 13, bold: true, color: { argb: WHITE } };
   titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: CBRE_DARK_GREEN } };
   titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -516,14 +684,14 @@ export function buildDashboardSheet(workbook, allTickets, selectedYear = 'all') 
 
   // Row 1 of KPI Cards (Rows 6-8)
   createCard('B', 'C', 6, 'TOTAL VOLUME', total.toLocaleString(), 'Total Tracked Tickets', CBRE_LIGHT_BG, CBRE_DARK_GREEN);
-  createCard('D', 'E', 6, 'PENDING BACKLOG (NAB ALERT)', `${pendingTotal} (${total > 0 ? Math.round((pendingTotal / total) * 100) : 0}%)`, `Open: ${open} | In-Prog: ${inProgress}`, NAB_LIGHT_BG, NAB_RED);
+  createCard('D', 'E', 6, 'PENDING BACKLOG (URGENT ALERT)', `${pendingTotal} (${total > 0 ? Math.round((pendingTotal / total) * 100) : 0}%)`, `Open: ${open} | In-Prog: ${inProgress}`, ALERT_LIGHT_BG, ALERT_RED);
   createCard('F', 'G', 6, 'RESOLVED VOLUME', `${resolved.toLocaleString()} (${resolutionRate}%)`, 'Completed Operations', CBRE_LIGHT_BG, CBRE_EMERALD);
   createCard('H', 'I', 6, 'SLA TAT COMPLIANCE', `${tatCompliance}%`, `${(total - tatBreached).toLocaleString()} On-Time SLA`, CBRE_LIGHT_BG, CBRE_EMERALD);
 
   // Row 2 of KPI Cards (Rows 10-12)
   createCard('B', 'C', 10, 'REACTIVE COMPLAINTS', `${reactive.toLocaleString()} (${reactiveRate}%)`, 'Unscheduled Issues', 'FFFFFBEB', 'FFB45309');
   createCard('D', 'E', 10, 'PROACTIVE WALKTHROUGHS', `${proactive.toLocaleString()} (${proactiveRate}%)`, 'Scheduled Audits', CBRE_LIGHT_BG, CBRE_DARK_GREEN);
-  createCard('F', 'G', 10, 'TAT SLA BREACHES', `${tatBreached.toLocaleString()}`, `${100 - tatCompliance}% SLA Overdue`, NAB_LIGHT_BG, NAB_RED);
+  createCard('F', 'G', 10, 'TAT SLA BREACHES', `${tatBreached.toLocaleString()}`, `${100 - tatCompliance}% SLA Overdue`, ALERT_LIGHT_BG, ALERT_RED);
   createCard('H', 'I', 10, 'FACILITY SITES', `${VALID_FACILITY_SITES.length} Locations`, 'DT3, DT4 Floors L1/L4/L5/L6', SLATE_BG, SLATE_DARK);
 
   let curRow = 14;
@@ -585,8 +753,8 @@ export function buildDashboardSheet(workbook, allTickets, selectedYear = 'all') 
       { v: s.total, a: 'right', b: true },
       { v: `${share.toFixed(1)}%`, a: 'right' },
       { v: s.resolved, a: 'right' },
-      { v: s.breached, a: 'right', color: s.breached > 0 ? NAB_RED : 'FF64748B' },
-      { v: `${sla}%`, a: 'right', color: sla >= 90 ? CBRE_EMERALD : NAB_RED },
+      { v: s.breached, a: 'right', color: s.breached > 0 ? ALERT_RED : 'FF64748B' },
+      { v: `${sla}%`, a: 'right', color: sla >= 90 ? CBRE_EMERALD : ALERT_RED },
     ];
     vals.forEach((item, cIdx) => {
       const colLetter = String.fromCharCode('B'.charCodeAt(0) + cIdx);
@@ -650,9 +818,9 @@ export function buildDashboardSheet(workbook, allTickets, selectedYear = 'all') 
       { v: c.total, a: 'right', b: true },
       { v: `${share.toFixed(1)}%`, a: 'right' },
       { v: c.resolved, a: 'right' },
-      { v: c.pending, a: 'right', color: c.pending > 0 ? NAB_RED : 'FF64748B' },
-      { v: c.breached, a: 'right', color: c.breached > 0 ? NAB_RED : 'FF64748B' },
-      { v: `${sla}%`, a: 'right', color: sla >= 90 ? CBRE_EMERALD : NAB_RED },
+      { v: c.pending, a: 'right', color: c.pending > 0 ? ALERT_RED : 'FF64748B' },
+      { v: c.breached, a: 'right', color: c.breached > 0 ? ALERT_RED : 'FF64748B' },
+      { v: `${sla}%`, a: 'right', color: sla >= 90 ? CBRE_EMERALD : ALERT_RED },
       { v: sla >= 95 ? 'Compliant' : sla >= 80 ? 'Within SLA' : 'Needs Review', a: 'center' },
     ];
     vals.forEach((item, cIdx) => {
@@ -719,9 +887,9 @@ export function buildDashboardSheet(workbook, allTickets, selectedYear = 'all') 
       { v: m.reactive, a: 'right' },
       { v: m.proactive, a: 'right' },
       { v: m.resolved, a: 'right' },
-      { v: m.breached, a: 'right', color: m.breached > 0 ? NAB_RED : 'FF64748B' },
+      { v: m.breached, a: 'right', color: m.breached > 0 ? ALERT_RED : 'FF64748B' },
       { v: `${mRes}%`, a: 'right' },
-      { v: `${mTat}%`, a: 'right', color: mTat >= 90 ? CBRE_EMERALD : NAB_RED },
+      { v: `${mTat}%`, a: 'right', color: mTat >= 90 ? CBRE_EMERALD : ALERT_RED },
     ];
     vals.forEach((item, cIdx) => {
       const colLetter = String.fromCharCode('B'.charCodeAt(0) + cIdx);
@@ -798,7 +966,7 @@ export function buildDashboardSheet(workbook, allTickets, selectedYear = 'all') 
         { v: `#${idx + 1}`, a: 'center', b: true },
         { v: desc, a: 'left' },
         { v: cnt, a: 'right', b: true },
-        { v: idx < 3 ? 'High Priority' : 'Standard', a: 'center', color: idx < 3 ? NAB_RED : 'FF64748B' },
+        { v: idx < 3 ? 'High Priority' : 'Standard', a: 'center', color: idx < 3 ? ALERT_RED : 'FF64748B' },
       ];
       vals.forEach((item, cIdx) => {
         const colLetter = String.fromCharCode('B'.charCodeAt(0) + cIdx);
@@ -819,7 +987,7 @@ export function buildDashboardSheet(workbook, allTickets, selectedYear = 'all') 
  */
 export async function exportTicketsToExcel(tickets, filename = 'Helpdesk_Tracker_Export.xlsx', selectedYear = 'all') {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'CBRE | NAB Facility Tracker Hub';
+  workbook.creator = 'CBRE Facility Management Operations Hub';
   workbook.created = new Date();
 
   // 1. FIRST WORKSHEET: Dedicated Executive Dashboard matching the in-app analytics
@@ -917,14 +1085,11 @@ export function parseSheetToTickets(workbook, selectedSheetName, existingTickets
     const ticket = {};
 
     COLUMNS_SCHEMA.forEach((col) => {
-      let rawVal = row[col.key];
+      let rawVal = getTicketFieldValue(row, col.key);
 
-      if (rawVal === undefined) {
-        const trimmedKey = col.key.trim();
-        const foundKey = Object.keys(row).find((k) => k.trim() === trimmedKey);
-        if (foundKey) {
-          rawVal = row[foundKey];
-        }
+      if (rawVal === undefined || rawVal === null || String(rawVal).trim() === '') {
+        const def = typeof col.defaultValue === 'function' ? col.defaultValue() : col.defaultValue;
+        rawVal = def !== undefined && def !== null ? def : '';
       }
 
       if (col.key === 'Month ') {
@@ -932,15 +1097,19 @@ export function parseSheetToTickets(workbook, selectedSheetName, existingTickets
       } else if (col.key === 'is On TAT') {
         ticket[col.key] = formatTatValue(rawVal);
       } else if (col.type === 'date') {
-        ticket[col.key] = formatExcelDate(rawVal);
+        ticket[col.key] = formatExcelDate(rawVal, sheetName.includes('2025') ? '2025' : '2026');
       } else if (col.type === 'time') {
         ticket[col.key] = formatExcelTime(rawVal);
       } else if (rawVal !== undefined && rawVal !== null) {
         ticket[col.key] = String(rawVal).trim();
       } else {
-        ticket[col.key] = typeof col.defaultValue === 'function' ? col.defaultValue() : col.defaultValue;
+        ticket[col.key] = '';
       }
     });
+
+    // Normalize field variations (Action Taken / Action taken, Description, Times, etc.)
+    const normalized = normalizeTicketFields(ticket);
+    Object.assign(ticket, normalized);
 
     // Detect and skip pivot table / summary rows (e.g. from Helpdesk Summary or calculation sheets)
     if (isInvalidPivotOrSummaryRow(ticket)) {

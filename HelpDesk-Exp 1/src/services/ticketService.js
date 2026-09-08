@@ -21,6 +21,7 @@ import {
   identifyDuplicateTicketIds,
   getTicketUniqueKey,
   detectTicketYear,
+  normalizeTicketFields,
 } from '../utils/schema';
 
 const COLLECTION_NAME = 'tickets';
@@ -34,6 +35,16 @@ function getInitialLocalTickets() {
       const parsed = JSON.parse(cached);
       if (Array.isArray(parsed) && parsed.length > 0) {
         const validTickets = parsed.filter((t) => !isInvalidPivotOrSummaryRow(t));
+
+        // Auto-heal: If cached localStorage data lacks 2025 Action Taken, purge cache & reload pristine dataset
+        const sample2025 = validTickets.find((t) => t.year === '2025' || (t['Date '] && t['Date '].startsWith('2025')));
+        if (sample2025 && !(sample2025['Action Taken '] || sample2025['Action taken '])) {
+          try {
+            localStorage.removeItem(LOCAL_STORAGE_KEY);
+          } catch (e) {}
+          return deduplicateTickets(sampleTickets.map(normalizeTicketFields));
+        }
+
         const mapped = validTickets.map((t, idx) => {
           let s = String(t['Site '] || t['Site'] || '').trim();
           let c = String(t['Request category'] || '').trim();
@@ -54,17 +65,17 @@ function getInitialLocalTickets() {
           }
           return t;
         });
-        return deduplicateTickets(mapped);
+        return deduplicateTickets(mapped.map(normalizeTicketFields));
       }
     }
   } catch (e) {
     console.warn('Error reading cached tickets:', e);
   }
-  return [...sampleTickets];
+  return deduplicateTickets(sampleTickets.map(normalizeTicketFields));
 }
 
 // IndexedDB High-Performance Cache for 10k+ Tickets
-const IDB_NAME = 'CBRE_Helpdesk_DB';
+const IDB_NAME = 'CBRE_Helpdesk_DB_v2';
 const IDB_STORE = 'tickets_store';
 
 function openTicketsIDB() {
@@ -92,7 +103,20 @@ export async function getCachedTicketsIDB() {
     try {
       const tx = idb.transaction(IDB_STORE, 'readonly');
       const req = tx.objectStore(IDB_STORE).get('cached_tickets');
-      req.onsuccess = () => resolve(req.result || null);
+      req.onsuccess = () => {
+        const res = req.result;
+        if (Array.isArray(res) && res.length > 0) {
+          const sample2025 = res.find((t) => t.year === '2025' || (t['Date '] && t['Date '].startsWith('2025')));
+          if (sample2025 && !(sample2025['Action Taken '] || sample2025['Action taken '])) {
+            console.info('Purging stale IndexedDB cache lacking 2025 Action Taken...');
+            resolve(null);
+            return;
+          }
+          resolve(res.map(normalizeTicketFields));
+        } else {
+          resolve(null);
+        }
+      };
       req.onerror = () => resolve(null);
     } catch (e) {
       resolve(null);
@@ -112,34 +136,35 @@ export async function setCachedTicketsIDB(tickets) {
 }
 
 export function sanitizeTicketForSupabase(ticket) {
-  const yr = String(ticket.year || detectTicketYear(ticket));
-  const sr = String(ticket['Sr no.'] || '');
-  const id = ticket.id ? String(ticket.id) : `sr-${yr}-${sr}`;
+  const normalized = normalizeTicketFields(ticket);
+  const yr = String(normalized.year || detectTicketYear(normalized));
+  const sr = String(normalized['Sr no.'] || '');
+  const id = normalized.id ? String(normalized.id) : `sr-${yr}-${sr}`;
 
   return {
     id,
     "Sr no.": sr,
-    "Site ": String(ticket['Site '] || ticket.Site || 'DT3'),
-    "Zone": String(ticket['Zone'] || ''),
-    "Location": String(ticket['Location'] || ''),
-    "Month ": String(ticket['Month '] || ''),
-    "Date ": String(ticket['Date '] || ''),
-    "Report Time": String(ticket['Report Time'] || ''),
-    "Request category": String(ticket['Request category'] || 'Housekeeping'),
-    "Employee Name ": String(ticket['Employee Name '] || ''),
-    "Request Via ": String(ticket['Request Via '] || 'In person'),
-    "Discription ": String(ticket['Discription '] || ticket.Description || ''),
-    "Action Taken ": String(ticket['Action Taken '] || ''),
-    "Date close ": String(ticket['Date close '] || ''),
-    "Resolved time": String(ticket['Resolved time'] || ticket['Close Time'] || ''),
-    "Status ": String(ticket['Status '] || 'Resolved'),
-    "Request from ": String(ticket['Request from '] || 'Employee'),
-    "Call type": String(ticket['Call type'] || 'Reactive'),
-    "Remark": String(ticket['Remark'] || ''),
-    "is On TAT": String(ticket['is On TAT'] || 'Yes'),
-    "Priority": String(ticket['Priority'] || 'Low'),
+    "Site ": String(normalized['Site '] || 'DT3'),
+    "Zone": String(normalized['Zone'] || ''),
+    "Location": String(normalized['Location'] || ''),
+    "Month ": String(normalized['Month '] || ''),
+    "Date ": String(normalized['Date '] || ''),
+    "Report Time": String(normalized['Report Time'] || ''),
+    "Request category": String(normalized['Request category'] || 'Housekeeping'),
+    "Employee Name ": String(normalized['Employee Name '] || ''),
+    "Request Via ": String(normalized['Request Via '] || 'In person'),
+    "Discription ": String(normalized['Discription '] || ''),
+    "Action Taken ": String(normalized['Action Taken '] || ''),
+    "Date close ": String(normalized['Date close '] || ''),
+    "Resolved time": String(normalized['Resolved time'] || ''),
+    "Status ": String(normalized['Status '] || 'Resolved'),
+    "Request from ": String(normalized['Request from '] || 'Employee'),
+    "Call type": String(normalized['Call type'] || 'Reactive'),
+    "Remark": String(normalized['Remark'] || ''),
+    "is On TAT": String(normalized['is On TAT'] || 'Yes'),
+    "Priority": String(normalized['Priority'] || 'Low'),
     "year": yr,
-    "last_updated_by": String(ticket.lastUpdatedBy || 'system'),
+    "last_updated_by": String(normalized.lastUpdatedBy || normalized.last_updated_by || 'system'),
   };
 }
 
@@ -254,19 +279,39 @@ export function subscribeTickets(onSuccess, onError) {
             })().catch(console.warn);
           }
 
+          // Auto-heal: If any ticket in Supabase lacks Action Taken, backfill from sampleTickets
+          const sampleMap = new Map();
+          sampleTickets.forEach((st) => {
+            const k = getTicketUniqueKey(st);
+            if (k) sampleMap.set(k, st);
+          });
+
+          const healedTickets = [];
           const sanitized = data
             .filter((t) => !isInvalidPivotOrSummaryRow(t))
             .map((t) => {
-              let s = String(t['Site '] || t['Site'] || '').trim();
-              let c = String(t['Request category'] || '').trim();
-              if (VALID_REQUEST_CATEGORIES.includes(s)) {
-                if (!c) t['Request category'] = s;
-                t['Site '] = 'DT3';
-              } else {
-                t['Site '] = sanitizeSiteValue(s);
+              const norm = normalizeTicketFields(t);
+              if (!norm['Action Taken '] || !norm['Action taken ']) {
+                const k = getTicketUniqueKey(norm);
+                const matched = sampleMap.get(k);
+                if (matched && (matched['Action Taken '] || matched['Action taken '])) {
+                  norm['Action Taken '] = matched['Action Taken '] || matched['Action taken '];
+                  norm['Action taken '] = norm['Action Taken '];
+                  healedTickets.push(norm);
+                }
               }
-              return t;
+              return norm;
             });
+
+          // Background heal Supabase rows with missing Action Taken
+          if (healedTickets.length > 0 && isSupabaseConfigValid && supabase) {
+            (async () => {
+              const cleanChunk = healedTickets.slice(0, 500).map(sanitizeTicketForSupabase);
+              await supabase.from('tickets').upsert(cleanChunk, { onConflict: 'id' });
+              console.info(`Auto-healed ${cleanChunk.length} tickets in Supabase with Action Taken.`);
+            })().catch(console.warn);
+          }
+
           localTickets = deduplicateTickets(sanitized);
           setCachedTicketsIDB(localTickets);
           notifyLocalListeners();
@@ -288,7 +333,7 @@ export function subscribeTickets(onSuccess, onError) {
         async () => {
           const data = await fetchAllSupabaseTickets();
           if (data && data.length > 0) {
-            localTickets = deduplicateTickets(data);
+            localTickets = deduplicateTickets(data.map(normalizeTicketFields));
             setCachedTicketsIDB(localTickets);
             notifyLocalListeners();
           }
@@ -456,6 +501,27 @@ export async function updateTicket(id, ticketData, userEmail = 'colleague@cbre.c
     lastUpdatedBy: userEmail,
   };
 
+  if (updatePayload['Action Taken '] !== undefined) {
+    updatePayload['Action taken '] = updatePayload['Action Taken '];
+  } else if (updatePayload['Action taken '] !== undefined) {
+    updatePayload['Action Taken '] = updatePayload['Action taken '];
+  }
+  if (updatePayload['Discription '] !== undefined) {
+    updatePayload['Description'] = updatePayload['Discription '];
+  } else if (updatePayload['Description'] !== undefined) {
+    updatePayload['Discription '] = updatePayload['Description'];
+  }
+  if (updatePayload['Date close '] !== undefined) {
+    updatePayload['Date close'] = updatePayload['Date close '];
+  } else if (updatePayload['Date close'] !== undefined) {
+    updatePayload['Date close '] = updatePayload['Date close'];
+  }
+  if (updatePayload['Resolved time'] !== undefined) {
+    updatePayload['Resolved time '] = updatePayload['Resolved time'];
+  } else if (updatePayload['Resolved time '] !== undefined) {
+    updatePayload['Resolved time'] = updatePayload['Resolved time '];
+  }
+
   const idStr = String(id || '');
   const index = localTickets.findIndex(
     (t) => (t.id && String(t.id) === idStr) || (t['Sr no.'] && String(t['Sr no.']) === idStr)
@@ -470,9 +536,13 @@ export async function updateTicket(id, ticketData, userEmail = 'colleague@cbre.c
   }
 
   if (isSupabaseConfigValid && supabase && id) {
+    const supabaseUpdate = { ...updatePayload };
+    delete supabaseUpdate['Action taken '];
+    delete supabaseUpdate['Description'];
+    delete supabaseUpdate['Resolved time '];
     supabase
       .from('tickets')
-      .update(updatePayload)
+      .update(supabaseUpdate)
       .eq('id', String(id))
       .catch((e) => console.warn('Supabase update notice:', e));
   }

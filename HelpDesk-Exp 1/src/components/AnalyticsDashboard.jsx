@@ -54,7 +54,7 @@ import {
 const STATUS_COLORS = {
   Resolved: '#10b981', // CBRE Emerald
   Closed: '#059669',
-  'Not Resolved': '#D40026', // NAB Star Red
+  'Not Resolved': '#D40026', // Urgent Crimson
   Open: '#f59e0b',
   'In-Progress': '#0284c7',
   Other: '#94a3b8',
@@ -62,7 +62,7 @@ const STATUS_COLORS = {
 
 const CATEGORY_COLORS = [
   '#006A4E', // CBRE Forest Green
-  '#D40026', // NAB Star Red
+  '#D40026', // Crimson Alert
   '#10b981', // CBRE Emerald
   '#f59e0b', // Amber
   '#0284c7', // Sky Blue
@@ -72,7 +72,7 @@ const CATEGORY_COLORS = [
 ];
 
 const PRIORITY_COLORS = {
-  High: '#D40026', // NAB Star Red Alert
+  High: '#D40026', // High Priority Alert
   Medium: '#f59e0b',
   Low: '#10b981', // CBRE Green
 };
@@ -81,7 +81,7 @@ const CHANNEL_COLORS = {
   'In person': '#006A4E', // CBRE Forest Green
   Mail: '#0284c7',        // Blue
   Phone: '#10b981',       // Emerald
-  'Feedback Form': '#D40026', // NAB Star Red
+  'Feedback Form': '#D40026', // Feedback Crimson
   ' Feedback form': '#D40026',
 };
 
@@ -768,20 +768,15 @@ export default function AnalyticsDashboard({
     <div className="bg-gradient-to-b from-[#061912] via-[#0b1c16] to-[#0f172a] border-b border-emerald-900/40 text-slate-100 p-4 sm:p-6 space-y-6 transition-all font-sans">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* ========================================================================= */}
-        {/* 1. TOP PROMINENT CBRE | NAB CO-BRANDED HEADER & YEAR TOGGLE */}
+        {/* 1. TOP PROMINENT CBRE FACILITY OPERATIONS HEADER & YEAR TOGGLE */}
         {/* ========================================================================= */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-emerald-900/40">
           <div className="space-y-1.5">
-            {/* Co-Branded Enterprise Badge Bar */}
+            {/* Enterprise Badge Bar */}
             <div className="flex flex-wrap items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-md bg-[#003F2D] text-emerald-300 font-black text-[11px] tracking-wider border border-emerald-500/40 shadow-sm flex items-center gap-1">
+              <span className="px-3 py-1 rounded-md bg-[#003F2D] text-emerald-300 font-black text-xs tracking-wider border border-emerald-500/40 shadow-sm flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                 CBRE
-              </span>
-              <span className="text-slate-500 text-xs font-semibold">×</span>
-              <span className="px-2.5 py-0.5 rounded-md bg-[#D40026] text-white font-black text-[11px] tracking-wider border border-red-400/40 shadow-sm flex items-center gap-1">
-                <span className="text-[10px]">★</span>
-                NAB
               </span>
               <span className="text-[11px] font-semibold text-slate-400 tracking-wide">
                 Facility Management Operations Hub
@@ -797,7 +792,7 @@ export default function AnalyticsDashboard({
                   Operations & Reactive Analytics Hub
                 </h2>
                 <p className="text-xs text-slate-400">
-                  National Australia Bank Client Portfolio • Managed by CBRE Enterprise Facility Management
+                  Enterprise Portfolio Operations • Managed by CBRE Facility Management
                 </p>
               </div>
             </div>
@@ -1047,7 +1042,7 @@ export default function AnalyticsDashboard({
         </div>
 
         {/* ========================================================================= */}
-        {/* 3. EXECUTIVE KPIS (CBRE GREEN & NAB RED CO-BRANDED STYLING) */}
+        {/* 3. EXECUTIVE KPIS (CBRE FACILITY MANAGEMENT OPERATIONS) */}
         {/* ========================================================================= */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {/* Card 1: Total Tickets (CBRE Forest Emerald Theme) */}
@@ -1073,7 +1068,7 @@ export default function AnalyticsDashboard({
             </div>
           </div>
 
-          {/* Card 2: PENDING REQUESTS (NAB Star Red Urgent Pulse Alert) */}
+          {/* Card 2: PENDING REQUESTS (Urgent Pulse Alert) */}
           <div
             onClick={() =>
               handleDrilldown({
@@ -1105,7 +1100,7 @@ export default function AnalyticsDashboard({
             </div>
           </div>
 
-          {/* Card 3: Reactive Complaints (NAB Crimson Accent) */}
+          {/* Card 3: Reactive Complaints (Crimson Accent) */}
           <div
             onClick={() =>
               handleDrilldown({
@@ -1197,7 +1192,7 @@ export default function AnalyticsDashboard({
             </div>
           </div>
 
-          {/* Card 6: SLA TAT Compliance (Dual CBRE & NAB Indicator) */}
+          {/* Card 6: SLA TAT Compliance (CBRE Operations Indicator) */}
           <div
             onClick={() =>
               handleDrilldown({
