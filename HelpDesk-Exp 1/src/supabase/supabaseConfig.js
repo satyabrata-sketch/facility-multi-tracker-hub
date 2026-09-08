@@ -7,6 +7,14 @@ import { createClient } from '@supabase/supabase-js';
 // or via the in-app Database Settings Modal!
 // ---------------------------------------------------------------------
 
+export function sanitizeSupabaseUrl(url) {
+  if (!url) return '';
+  let clean = url.trim();
+  clean = clean.replace(/\/rest\/v1\/?$/, '');
+  clean = clean.replace(/\/+$/, '');
+  return clean;
+}
+
 const LOCAL_STORAGE_KEY = 'cbre_supabase_config';
 
 export function getSavedSupabaseConfig() {
@@ -15,7 +23,10 @@ export function getSavedSupabaseConfig() {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (parsed.supabaseUrl && parsed.supabaseAnonKey) {
-        return parsed;
+        return {
+          supabaseUrl: sanitizeSupabaseUrl(parsed.supabaseUrl),
+          supabaseAnonKey: parsed.supabaseAnonKey.trim(),
+        };
       }
     }
   } catch (e) {
@@ -23,13 +34,17 @@ export function getSavedSupabaseConfig() {
   }
 
   return {
-    supabaseUrl: import.meta.env.VITE_SUPABASE_URL || '',
-    supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+    supabaseUrl: sanitizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL || ''),
+    supabaseAnonKey: (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim(),
   };
 }
 
 export function saveSupabaseConfig(config) {
-  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(config));
+  const sanitized = {
+    supabaseUrl: sanitizeSupabaseUrl(config.supabaseUrl),
+    supabaseAnonKey: (config.supabaseAnonKey || '').trim(),
+  };
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sanitized));
   window.location.reload();
 }
 

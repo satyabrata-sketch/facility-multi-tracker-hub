@@ -25,6 +25,7 @@ import {
   saveSupabaseConfig,
   resetSupabaseConfig,
   isSupabaseConfigValid,
+  sanitizeSupabaseUrl,
 } from '../supabase/supabaseConfig';
 
 export const SUPABASE_SQL_SETUP_SCRIPT = `-- =====================================================
@@ -140,7 +141,7 @@ export default function FirebaseConfigModal({ isOpen, onClose }) {
 
   const handleSaveSupabase = () => {
     setError(null);
-    const cleanUrl = supabaseUrl.trim();
+    const cleanUrl = sanitizeSupabaseUrl(supabaseUrl);
     const cleanKey = supabaseAnonKey.trim();
 
     if (!cleanUrl || !cleanUrl.startsWith('https://') || !cleanUrl.includes('.supabase.co')) {
