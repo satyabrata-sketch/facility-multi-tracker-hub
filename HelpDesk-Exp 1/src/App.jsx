@@ -25,6 +25,7 @@ import {
   sanitizeSiteValue,
   VALID_REQUEST_CATEGORIES,
   getCurrentShortMonth,
+  deduplicateTickets,
 } from './utils/schema';
 import {
   formatShortMonth,
@@ -105,8 +106,11 @@ export default function App() {
           return t;
         });
 
-        // SORT ASCENDING BY SR NO: Sr no 1 must show from the beginning!
-        const sorted = [...formatted].sort((a, b) => {
+        // 3. Strictly eliminate all duplicates, keeping only unique records
+        const uniqueTickets = deduplicateTickets(formatted);
+
+        // 4. SORT ASCENDING BY SR NO: Sr no 1 must show from the beginning!
+        const sorted = [...uniqueTickets].sort((a, b) => {
           const srA = parseInt(a['Sr no.'], 10) || 0;
           const srB = parseInt(b['Sr no.'], 10) || 0;
           if (srA !== srB) {

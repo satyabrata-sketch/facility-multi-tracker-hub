@@ -153,6 +153,75 @@ export function sanitizeSiteValue(siteRaw) {
   return 'DT3';
 }
 
+/**
+ * Generates a stable, deterministic unique signature for a ticket
+ */
+export function getTicketUniqueKey(ticket) {
+  if (!ticket || typeof ticket !== 'object') return '';
+  const yr = detectTicketYear(ticket);
+  const sr = String(ticket['Sr no.'] || '').trim();
+  const site = String(ticket['Site '] || ticket['Site'] || '').trim().toUpperCase();
+  const date = String(ticket['Date '] || '').trim();
+  const month = String(ticket['Month '] || '').trim().toLowerCase();
+  const desc = String(ticket['Discription '] || ticket['Description'] || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+
+  // If a ticket already has a stable deterministic ID
+  if (ticket.id && (ticket.id.startsWith('sr-2025-') || ticket.id.startsWith('sr-2026-'))) {
+    return ticket.id;
+  }
+
+  // Tickets in each year are numbered by Sr no.
+  if (sr && /^\d+$/.test(sr)) {
+    return `${yr}_sr_${sr}_${site}_${desc.slice(0, 25)}`;
+  }
+
+  // Fallback for tickets with blank or non-numeric Sr no:
+  return `${yr}_${date || month}_${site}_${desc.slice(0, 40)}`;
+}
+
+/**
+ * Deduplicates an array of tickets, merging updates and keeping only strictly unique records
+ */
+export function deduplicateTickets(ticketList) {
+  if (!Array.isArray(ticketList) || ticketList.length === 0) return [];
+
+  const map = new Map();
+
+  ticketList.forEach((t, idx) => {
+    if (!t || isInvalidPivotOrSummaryRow(t)) return;
+    const key = getTicketUniqueKey(t);
+    if (!key) return;
+
+    if (!map.has(key)) {
+      const yr = detectTicketYear(t);
+      const sr = t['Sr no.'] || String(idx + 1);
+      const stableId = t.id || `sr-${yr}-${sr}`;
+      map.set(key, { ...t, id: stableId, year: yr });
+    } else {
+      // Duplicate found! Keep the most complete / updated record
+      const existing = map.get(key);
+      const isExistingClosed =
+        existing['Status '] === 'Closed' || existing['Status '] === 'Resolved';
+      const isNewClosed = t['Status '] === 'Closed' || t['Status '] === 'Resolved';
+
+      const existingScore = (isExistingClosed ? 3 : 0) + (existing['Action Taken '] ? 1 : 0);
+      const newScore = (isNewClosed ? 3 : 0) + (t['Action Taken '] ? 1 : 0);
+
+      const merged =
+        newScore >= existingScore
+          ? { ...existing, ...t, id: existing.id }
+          : { ...t, ...existing, id: existing.id };
+
+      map.set(key, merged);
+    }
+  });
+
+  return Array.from(map.values());
+}
+
 export const COLUMNS_SCHEMA = [
   {
     key: 'Sr no.',

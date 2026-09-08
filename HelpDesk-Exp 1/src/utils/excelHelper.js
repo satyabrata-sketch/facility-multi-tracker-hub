@@ -7,6 +7,7 @@ import {
   sanitizeSiteValue,
   VALID_REQUEST_CATEGORIES,
   VALID_FACILITY_SITES,
+  getTicketUniqueKey,
 } from './schema';
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -390,8 +391,8 @@ export function parseSheetToTickets(workbook, selectedSheetName, existingTickets
   // Only populate seenKeys from existing database tickets if skipExisting is explicitly requested!
   if (skipExisting && Array.isArray(existingTickets)) {
     existingTickets.forEach((t) => {
-      const key = `${t['Sr no.']}_${t['Date ']}_${t['Site ']}_${t['Discription ']}`.trim().toLowerCase();
-      seenKeys.add(key);
+      const key = getTicketUniqueKey(t);
+      if (key) seenKeys.add(key);
     });
   }
 
@@ -474,13 +475,13 @@ export function parseSheetToTickets(workbook, selectedSheetName, existingTickets
       ticket['Sr no.'] = String(index + 1);
     }
 
-    // Deduplication check: Sr no + Date + Site + Description
-    const dedupKey = `${ticket['Sr no.']}_${ticket['Date ']}_${ticket['Site ']}_${ticket['Discription ']}`.trim().toLowerCase();
-    if (seenKeys.has(dedupKey)) {
+    // Deduplication check: deterministic unique signature
+    const dedupKey = getTicketUniqueKey(ticket);
+    if (dedupKey && seenKeys.has(dedupKey)) {
       duplicatesFiltered++;
       return; // Skip duplicate!
     }
-    seenKeys.add(dedupKey);
+    if (dedupKey) seenKeys.add(dedupKey);
 
     tickets.push(ticket);
   });

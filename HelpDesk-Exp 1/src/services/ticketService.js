@@ -17,6 +17,9 @@ import {
   isInvalidPivotOrSummaryRow,
   sanitizeSiteValue,
   VALID_REQUEST_CATEGORIES,
+  deduplicateTickets,
+  getTicketUniqueKey,
+  detectTicketYear,
 } from '../utils/schema';
 
 const COLLECTION_NAME = 'tickets';
@@ -30,7 +33,7 @@ function getInitialLocalTickets() {
       const parsed = JSON.parse(cached);
       if (Array.isArray(parsed) && parsed.length > 0) {
         const validTickets = parsed.filter((t) => !isInvalidPivotOrSummaryRow(t));
-        return validTickets.map((t, idx) => {
+        const mapped = validTickets.map((t, idx) => {
           let s = String(t['Site '] || t['Site'] || '').trim();
           let c = String(t['Request category'] || '').trim();
           if (VALID_REQUEST_CATEGORIES.includes(s)) {
@@ -50,6 +53,7 @@ function getInitialLocalTickets() {
           }
           return t;
         });
+        return deduplicateTickets(mapped);
       }
     }
   } catch (e) {
@@ -528,26 +532,60 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
   const total = ticketsArray.length;
   const now = new Date().toISOString();
 
-  // 1. Format & merge into local in-memory cache and IndexedDB immediately
-  const formatted = ticketsArray.map((t, idx) => ({
-    ...t,
-    id: t.id || `imported-${Date.now()}-${idx}`,
-    createdAt: t.createdAt || now,
-    updatedAt: t.updatedAt || now,
-    lastUpdatedBy: userEmail,
-  }));
+  // 1. Build an index of existing tickets by their unique signature
+  const existingMap = new Map();
+  localTickets.forEach((t) => {
+    const k = getTicketUniqueKey(t);
+    if (k) existingMap.set(k, t);
+  });
 
-  const existingIds = new Set(localTickets.map((t) => t.id));
-  const newBatch = formatted.filter((t) => !existingIds.has(t.id));
-  localTickets = [...newBatch, ...localTickets];
+  // 2. Format & deduplicate incoming tickets: merge with existing if already present
+  const mergedIncoming = [];
+  ticketsArray.forEach((t, idx) => {
+    const k = getTicketUniqueKey(t);
+    const yr = detectTicketYear(t);
+    const sr = t['Sr no.'] || String(idx + 1);
+
+    if (k && existingMap.has(k)) {
+      // Existing ticket updated! Retain original ID and merge latest fields
+      const existing = existingMap.get(k);
+      const updated = {
+        ...existing,
+        ...t,
+        id: existing.id,
+        year: yr,
+        updatedAt: now,
+        lastUpdatedBy: userEmail,
+      };
+      existingMap.set(k, updated);
+      mergedIncoming.push(updated);
+    } else {
+      // Brand new ticket: assign stable deterministic ID
+      const stableId = t.id || `sr-${yr}-${sr}`;
+      const created = {
+        ...t,
+        id: stableId,
+        year: yr,
+        createdAt: t.createdAt || now,
+        updatedAt: now,
+        lastUpdatedBy: userEmail,
+      };
+      if (k) existingMap.set(k, created);
+      mergedIncoming.push(created);
+    }
+  });
+
+  // 3. Set local tickets as all strictly unique records
+  localTickets = deduplicateTickets(Array.from(existingMap.values()));
   setCachedTicketsIDB(localTickets);
   notifyLocalListeners();
 
+  // 4. Save to Supabase with upsert on stable ID (no duplicate rows)
   if (isSupabaseConfigValid && supabase) {
     const chunkSize = 200;
     let processed = 0;
-    for (let i = 0; i < total; i += chunkSize) {
-      const chunk = formatted.slice(i, i + chunkSize);
+    for (let i = 0; i < mergedIncoming.length; i += chunkSize) {
+      const chunk = mergedIncoming.slice(i, i + chunkSize);
       try {
         await supabase.from('tickets').upsert(chunk, { onConflict: 'id' });
       } catch (e) {
@@ -559,21 +597,25 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
     return processed;
   }
 
+  // 5. Save to Firestore (upsert with stable document IDs so re-importing NEVER creates duplicates!)
   if (isConfigValid && db) {
     const chunkSize = 400;
     let processed = 0;
 
-    for (let i = 0; i < total; i += chunkSize) {
-      const chunk = ticketsArray.slice(i, i + chunkSize);
+    for (let i = 0; i < mergedIncoming.length; i += chunkSize) {
+      const chunk = mergedIncoming.slice(i, i + chunkSize);
       const batch = writeBatch(db);
       chunk.forEach((ticket) => {
-        const docRef = doc(collection(db, COLLECTION_NAME));
-        batch.set(docRef, {
-          ...ticket,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          lastUpdatedBy: userEmail,
-        });
+        const docRef = doc(db, COLLECTION_NAME, ticket.id);
+        batch.set(
+          docRef,
+          {
+            ...ticket,
+            updatedAt: serverTimestamp(),
+            lastUpdatedBy: userEmail,
+          },
+          { merge: true }
+        );
       });
       await batch.commit();
       processed += chunk.length;
@@ -586,4 +628,16 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
 
   if (onProgress) onProgress(total, total);
   return total;
+}
+
+/**
+ * Clean & Purge any duplicates across tickets
+ */
+export function purgeAllDuplicates() {
+  const originalCount = localTickets.length;
+  localTickets = deduplicateTickets(localTickets);
+  const removed = originalCount - localTickets.length;
+  setCachedTicketsIDB(localTickets);
+  notifyLocalListeners();
+  return removed;
 }

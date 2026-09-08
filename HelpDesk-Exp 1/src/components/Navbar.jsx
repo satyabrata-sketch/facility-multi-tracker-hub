@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   FileSpreadsheet,
+  LogOut,
 } from 'lucide-react';
 import { isConfigValid } from '../firebase/firebaseConfig';
 import { isAdminIdentity } from '../firebase/authService';
@@ -231,6 +232,16 @@ export default function Navbar({
                     </span>
                   </div>
                 </div>
+
+                {/* Logout Icon Button */}
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="p-2 rounded-lg bg-slate-800/80 border border-slate-700/70 text-slate-400 hover:text-rose-400 hover:bg-slate-700 hover:border-rose-500/40 transition flex items-center justify-center"
+                  title="Log Out"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
               </div>
             ) : (
               <button
@@ -352,6 +363,18 @@ export default function Navbar({
                     </p>
                   </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onLogout();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="p-1.5 rounded-lg bg-slate-700/80 text-slate-300 hover:text-rose-400 hover:bg-slate-700 transition"
+                  title="Log Out"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
               </div>
             ) : (
               <button

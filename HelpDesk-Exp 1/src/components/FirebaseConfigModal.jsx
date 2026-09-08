@@ -76,7 +76,18 @@ CREATE TABLE IF NOT EXISTS public.app_users (
 ALTER TABLE public.tickets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
 
--- 4. Create Public Access Policies (Unlimited Free Reads & Writes)
+-- 4. Clean up any existing policies first to avoid "already exists" errors
+DROP POLICY IF EXISTS "Public Read Tickets" ON public.tickets;
+DROP POLICY IF EXISTS "Public Insert Tickets" ON public.tickets;
+DROP POLICY IF EXISTS "Public Update Tickets" ON public.tickets;
+DROP POLICY IF EXISTS "Public Delete Tickets" ON public.tickets;
+
+DROP POLICY IF EXISTS "Public Read Users" ON public.app_users;
+DROP POLICY IF EXISTS "Public Insert Users" ON public.app_users;
+DROP POLICY IF EXISTS "Public Update Users" ON public.app_users;
+DROP POLICY IF EXISTS "Public Delete Users" ON public.app_users;
+
+-- 5. Create Permissive Access Policies
 CREATE POLICY "Public Read Tickets" ON public.tickets FOR SELECT USING (true);
 CREATE POLICY "Public Insert Tickets" ON public.tickets FOR INSERT WITH CHECK (true);
 CREATE POLICY "Public Update Tickets" ON public.tickets FOR UPDATE USING (true);
@@ -87,14 +98,27 @@ CREATE POLICY "Public Insert Users" ON public.app_users FOR INSERT WITH CHECK (t
 CREATE POLICY "Public Update Users" ON public.app_users FOR UPDATE USING (true);
 CREATE POLICY "Public Delete Users" ON public.app_users FOR DELETE USING (true);
 
--- 5. Enable Real-Time Replication across all users
-ALTER PUBLICATION supabase_realtime ADD TABLE public.tickets;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.app_users;
+-- 6. Safely enable Real-Time Replication across all users
+DO $$
+BEGIN
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.tickets;
+  EXCEPTION WHEN duplicate_object THEN
+    NULL;
+  END;
 
--- 6. Insert Default Admin User
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.app_users;
+  EXCEPTION WHEN duplicate_object THEN
+    NULL;
+  END;
+END $$;
+
+-- 7. Insert Default Admin User
 INSERT INTO public.app_users (uid, email, display_name, role)
 VALUES ('admin-satya', 'satyabrata.mohanty1@cbre.com', 'Satyabrata Mohanty', 'Admin')
-ON CONFLICT (uid) DO NOTHING;
+ON CONFLICT (uid) DO UPDATE
+SET role = 'Admin', display_name = 'Satyabrata Mohanty';
 `;
 
 export default function FirebaseConfigModal({ isOpen, onClose }) {
