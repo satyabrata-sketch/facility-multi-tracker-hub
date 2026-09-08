@@ -161,25 +161,20 @@ export function getTicketUniqueKey(ticket) {
   const yr = detectTicketYear(ticket);
   const sr = String(ticket['Sr no.'] || '').trim();
   const site = String(ticket['Site '] || ticket['Site'] || '').trim().toUpperCase();
-  const date = String(ticket['Date '] || '').trim();
-  const month = String(ticket['Month '] || '').trim().toLowerCase();
+  const date = String(ticket['Date '] || ticket['Month '] || '').trim();
+  const cat = String(ticket['Request category'] || '').trim().toLowerCase();
   const desc = String(ticket['Discription '] || ticket['Description'] || '')
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ' ');
 
-  // If a ticket already has a stable deterministic ID
-  if (ticket.id && (ticket.id.startsWith('sr-2025-') || ticket.id.startsWith('sr-2026-'))) {
-    return ticket.id;
+  // If already assigned a unique id
+  if (ticket.id) {
+    return String(ticket.id);
   }
 
-  // Tickets in each year are numbered by Sr no.
-  if (sr && /^\d+$/.test(sr)) {
-    return `${yr}_sr_${sr}_${site}_${desc.slice(0, 25)}`;
-  }
-
-  // Fallback for tickets with blank or non-numeric Sr no:
-  return `${yr}_${date || month}_${site}_${desc.slice(0, 40)}`;
+  // Combine Sr + Date + Site + Category + partial Desc to ensure separate tickets with reused Sr nos are never dropped!
+  return `${yr}_sr_${sr}_${date}_${site}_${cat}_${desc.slice(0, 30)}`;
 }
 
 /**
@@ -197,8 +192,7 @@ export function deduplicateTickets(ticketList) {
 
     if (!map.has(key)) {
       const yr = detectTicketYear(t);
-      const sr = t['Sr no.'] || String(idx + 1);
-      const stableId = t.id || `sr-${yr}-${sr}`;
+      const stableId = t.id || `sr-${yr}-${idx + 1}`;
       map.set(key, { ...t, id: stableId, year: yr });
     } else {
       // Duplicate found! Keep the most complete / updated record
