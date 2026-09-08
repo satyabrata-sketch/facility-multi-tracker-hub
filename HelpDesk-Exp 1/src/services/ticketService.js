@@ -252,13 +252,18 @@ export async function addTicket(ticketData, userEmail = 'anonymous@cbre.com') {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    return { id: docRef.id, ...newTicket };
+    const created = { id: docRef.id, ...newTicket };
+    localTickets.unshift(created);
+    setCachedTicketsIDB(localTickets);
+    notifyLocalListeners();
+    return created;
   }
 
   // Demo mode
   const mockId = 'ticket-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
   const created = { id: mockId, ...newTicket };
   localTickets.unshift(created);
+  setCachedTicketsIDB(localTickets);
   notifyLocalListeners();
   return created;
 }
@@ -274,6 +279,16 @@ export async function updateTicket(id, ticketData, userEmail = 'colleague@cbre.c
     lastUpdatedBy: userEmail,
   };
 
+  const index = localTickets.findIndex((t) => t.id === id);
+  if (index !== -1) {
+    localTickets[index] = {
+      ...localTickets[index],
+      ...updatePayload,
+    };
+    setCachedTicketsIDB(localTickets);
+    notifyLocalListeners();
+  }
+
   if (isConfigValid && db) {
     const ticketRef = doc(db, COLLECTION_NAME, id);
     await updateDoc(ticketRef, {
@@ -283,14 +298,7 @@ export async function updateTicket(id, ticketData, userEmail = 'colleague@cbre.c
     return { id, ...updatePayload };
   }
 
-  // Demo mode
-  const index = localTickets.findIndex((t) => t.id === id);
   if (index !== -1) {
-    localTickets[index] = {
-      ...localTickets[index],
-      ...updatePayload,
-    };
-    notifyLocalListeners();
     return localTickets[index];
   }
   throw new Error('Ticket not found: ' + id);
@@ -300,15 +308,16 @@ export async function updateTicket(id, ticketData, userEmail = 'colleague@cbre.c
  * Delete a ticket
  */
 export async function deleteTicket(id) {
+  localTickets = localTickets.filter((t) => t.id !== id);
+  setCachedTicketsIDB(localTickets);
+  notifyLocalListeners();
+
   if (isConfigValid && db) {
     const ticketRef = doc(db, COLLECTION_NAME, id);
     await deleteDoc(ticketRef);
     return true;
   }
 
-  // Demo mode
-  localTickets = localTickets.filter((t) => t.id !== id);
-  notifyLocalListeners();
   return true;
 }
 
@@ -316,6 +325,11 @@ export async function deleteTicket(id) {
  * Bulk delete multiple tickets
  */
 export async function bulkDeleteTickets(ids) {
+  const idSet = new Set(ids);
+  localTickets = localTickets.filter((t) => !idSet.has(t.id));
+  setCachedTicketsIDB(localTickets);
+  notifyLocalListeners();
+
   if (isConfigValid && db) {
     const batches = [];
     const chunkSize = 400; // Firestore limit is 500
@@ -332,10 +346,6 @@ export async function bulkDeleteTickets(ids) {
     return true;
   }
 
-  // Demo mode
-  const idSet = new Set(ids);
-  localTickets = localTickets.filter((t) => !idSet.has(t.id));
-  notifyLocalListeners();
   return true;
 }
 

@@ -480,17 +480,17 @@ export default function AnalyticsDashboard({
     ];
   }, [filteredDataset]);
 
-  // Top Technicians / Engineers Across All Tickets (Used in Visual 11)
-  const topEngineersData = useMemo(() => {
-    const engineerCounts = {};
+  // Top Ticket Raisers Across All Tickets (Used in Visual 11)
+  const topRaisersData = useMemo(() => {
+    const raiserCounts = {};
     filteredDataset.forEach((t) => {
-      const eng = (t['Employee Name '] || 'Unassigned').trim();
-      if (eng && eng.toLowerCase() !== 'unassigned') {
-        engineerCounts[eng] = (engineerCounts[eng] || 0) + 1;
+      const raiser = (t['Employee Name '] || 'Unassigned').trim();
+      if (raiser && raiser.toLowerCase() !== 'unassigned') {
+        raiserCounts[raiser] = (raiserCounts[raiser] || 0) + 1;
       }
     });
 
-    return Object.entries(engineerCounts)
+    return Object.entries(raiserCounts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 7)
       .map(([fullName, count]) => ({
@@ -500,6 +500,7 @@ export default function AnalyticsDashboard({
         count,
       }));
   }, [filteredDataset]);
+  const topEngineersData = topRaisersData; // alias for backwards compatibility
 
   // =========================================================================
   // DEEP REACTIVE TICKETS DRILL-DOWN INTELLIGENCE
@@ -518,7 +519,7 @@ export default function AnalyticsDashboard({
     const channelCounts = {};
     const monthCounts = {};
     const issueCounts = {};
-    const engineerCounts = {};
+    const raiserCounts = {};
     const hourCounts = {};
 
     reactiveTickets.forEach((t) => {
@@ -529,7 +530,7 @@ export default function AnalyticsDashboard({
       const channel = (t['Request Via '] || 'In person').trim();
       const m = (t['Month '] || '').trim();
       const desc = (t['Discription '] || '').trim();
-      const eng = (t['Employee Name '] || 'Unassigned').trim();
+      const raiser = (t['Employee Name '] || 'Unassigned').trim();
       const repTime = (t['Report Time'] || '').trim();
 
       if (s === 'resolved' || s === 'closed') resolvedReactive++;
@@ -546,8 +547,8 @@ export default function AnalyticsDashboard({
         issueCounts[cleaned] = (issueCounts[cleaned] || 0) + 1;
       }
 
-      if (eng) {
-        engineerCounts[eng] = (engineerCounts[eng] || 0) + 1;
+      if (raiser) {
+        raiserCounts[raiser] = (raiserCounts[raiser] || 0) + 1;
       }
 
       // Hour breakdown (e.g. 08:30 -> 08:00)
@@ -586,8 +587,8 @@ export default function AnalyticsDashboard({
       .slice(0, 8)
       .map(([name, count]) => ({ name, count }));
 
-    // 6. Top Engineers on Reactive Calls
-    const topEngineers = Object.entries(engineerCounts)
+    // 6. Top Ticket Raisers on Reactive Calls
+    const topRaisers = Object.entries(raiserCounts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
       .map(([name, count]) => ({
@@ -620,7 +621,8 @@ export default function AnalyticsDashboard({
       monthlyData,
       channelData,
       topIssues,
-      topEngineers,
+      topRaisers,
+      topEngineers: topRaisers, // alias for backwards compatibility
       hourlyData,
     };
   }, [filteredDataset]);
@@ -1984,7 +1986,7 @@ export default function AnalyticsDashboard({
         </div>
 
         {/* ========================================================================= */}
-        {/* 7. MORE VISUALS: SLA COMPLIANCE, PRIORITY & TOP ENGINEERS */}
+        {/* 7. MORE VISUALS: SLA COMPLIANCE, PRIORITY & TOP TICKET RAISERS */}
         {/* ========================================================================= */}
         <div className="space-y-6">
           <div className="flex items-center justify-between pb-2 border-b border-slate-800">
@@ -2095,16 +2097,19 @@ export default function AnalyticsDashboard({
               </div>
             </div>
 
-            {/* Visual 11: Top Technicians / Engineers */}
+            {/* Visual 11: Top Ticket Raisers (Logged By) */}
             <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700/80 space-y-3">
-              <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                <Users className="w-3.5 h-3.5 text-purple-400" />
-                Top Assigned Technicians
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                  <Users className="w-3.5 h-3.5 text-purple-400" />
+                  Top Ticket Raisers (Logged By)
+                </h4>
+                <span className="text-[10px] text-slate-400">Tickets Logged</span>
+              </div>
               <div className="h-48 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
-                    data={topEngineersData}
+                    data={topRaisersData}
                     layout="vertical"
                     margin={{ top: 5, right: 15, left: 10, bottom: 5 }}
                   >
@@ -2118,7 +2123,7 @@ export default function AnalyticsDashboard({
                         borderRadius: '0.75rem',
                         fontSize: '11px',
                       }}
-                      formatter={(val, _, item) => [val, item.payload.fullName]}
+                      formatter={(val, _, item) => [`${val} tickets raised`, `Raised by: ${item.payload.fullName}`]}
                     />
                     <Bar
                       dataKey="count"
@@ -2126,9 +2131,9 @@ export default function AnalyticsDashboard({
                       radius={[0, 6, 6, 0]}
                       onClick={(entry) =>
                         handleDrilldown({
-                          type: 'engineer',
+                          type: 'raiser',
                           value: entry.fullName,
-                          label: `Technician: ${entry.fullName}`,
+                          label: `Raised By: ${entry.fullName}`,
                         })
                       }
                       className="cursor-pointer"

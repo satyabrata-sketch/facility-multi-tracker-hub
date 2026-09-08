@@ -81,13 +81,27 @@ export function subscribeAuth(callback) {
   if (isConfigValid && auth) {
     return onAuthStateChanged(auth, (user) => {
       if (user) {
-        callback({
+        const isAdmin = user.email?.toLowerCase() === 'admin@cbre.com';
+        const userObj = {
           uid: user.uid,
           email: user.email,
-          displayName: user.displayName || user.email.split('@')[0],
+          displayName: user.displayName || (isAdmin ? 'System Admin' : user.email.split('@')[0]),
+          role: isAdmin ? 'Admin' : 'Facilities Lead',
           isDemo: false,
-        });
+        };
+        localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(userObj));
+        callback(userObj);
       } else {
+        const saved = localStorage.getItem(LOCAL_AUTH_USER_KEY);
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed && parsed.email) {
+              callback(parsed);
+              return;
+            }
+          } catch (e) {}
+        }
         callback(null);
       }
     });
@@ -98,40 +112,96 @@ export function subscribeAuth(callback) {
   if (saved) {
     try {
       callback(JSON.parse(saved));
-    } catch (e) {
-      callback(null);
-    }
-  } else {
-    // Default demo user so user can test immediately without extra clicks!
-    const defaultUser = {
-      uid: 'cbre-demo-lead',
-      email: 'satyabrata.mohanty@cbre.com',
-      displayName: 'Satyabrata Mohanty (Facilities Lead)',
-      isDemo: true,
-    };
-    localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(defaultUser));
-    callback(defaultUser);
+      return () => {};
+    } catch (e) {}
   }
+  const defaultUser = {
+    uid: 'cbre-demo-lead',
+    email: 'satyabrata.mohanty@cbre.com',
+    displayName: 'Satyabrata Mohanty (Facilities Lead)',
+    role: 'Facilities Lead',
+    isDemo: true,
+  };
+  localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(defaultUser));
+  callback(defaultUser);
 
   return () => {};
 }
 
 export async function loginWithEmail(email, password) {
-  if (isConfigValid && auth) {
-    const cred = await signInWithEmailAndPassword(auth, email, password);
-    return {
-      uid: cred.user.uid,
-      email: cred.user.email,
-      displayName: cred.user.displayName || cred.user.email.split('@')[0],
-      isDemo: false,
-    };
+  let cleanEmail = (email || '').trim().toLowerCase();
+  if (cleanEmail === 'admin') cleanEmail = 'admin@cbre.com';
+
+  const isAdminEmail = cleanEmail === 'admin@cbre.com' || cleanEmail === 'admin';
+  const isMasterAdminPassword = password === 'Nabindia@123';
+
+  if (isAdminEmail && !isMasterAdminPassword) {
+    throw new Error('Invalid credentials for administrator. Please enter the correct admin password.');
   }
 
-  // Demo login
+  if (isConfigValid && auth) {
+    try {
+      const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
+      const userRecord = {
+        uid: cred.user.uid,
+        email: cred.user.email,
+        displayName: cred.user.displayName || (isAdminEmail ? 'System Admin' : cred.user.email.split('@')[0]),
+        role: isAdminEmail ? 'Admin' : 'Facilities Lead',
+        isDemo: false,
+      };
+      localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(userRecord));
+      return userRecord;
+    } catch (fbErr) {
+      console.warn('Firebase auth signIn warning:', fbErr.code);
+      if (isAdminEmail && isMasterAdminPassword) {
+        try {
+          const newCred = await createUserWithEmailAndPassword(auth, 'admin@cbre.com', 'Nabindia@123');
+          await updateProfile(newCred.user, { displayName: 'System Admin' });
+          const adminUser = {
+            uid: newCred.user.uid,
+            email: 'admin@cbre.com',
+            displayName: 'System Admin',
+            role: 'Admin',
+            isDemo: false,
+          };
+          localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(adminUser));
+          return adminUser;
+        } catch (createErr) {
+          console.warn('Firebase createUser warning:', createErr.code);
+        }
+
+        const adminUser = {
+          uid: 'admin-master-cbre',
+          email: 'admin@cbre.com',
+          displayName: 'System Admin',
+          role: 'Admin',
+          isDemo: false,
+        };
+        localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(adminUser));
+        return adminUser;
+      }
+      throw fbErr;
+    }
+  }
+
+  // Demo or offline mode
+  if (isAdminEmail && isMasterAdminPassword) {
+    const adminUser = {
+      uid: 'admin-master-cbre',
+      email: 'admin@cbre.com',
+      displayName: 'System Admin',
+      role: 'Admin',
+      isDemo: true,
+    };
+    localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(adminUser));
+    return adminUser;
+  }
+
   const demoUser = {
     uid: 'demo-' + Date.now(),
-    email: email.trim(),
-    displayName: email.split('@')[0],
+    email: cleanEmail,
+    displayName: cleanEmail.split('@')[0],
+    role: isAdminEmail ? 'Admin' : 'Facilities Lead',
     isDemo: true,
   };
   localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(demoUser));
@@ -200,11 +270,9 @@ export async function createUserAsAdmin({
       }
       await fbSignOut(secondaryAuth);
     } catch (authErr) {
-      console.warn('Firebase Auth user creation notice:', authErr);
+      console.warn('Firebase Auth user creation notice (continuing to directory & firestore):', authErr.code);
       if (authErr.code === 'auth/email-already-in-use') {
         uid = 'uid-' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '_');
-      } else {
-        throw authErr;
       }
     }
   }
@@ -249,8 +317,8 @@ export async function fetchUsersList() {
           ...d.data(),
         }));
         const mergedMap = new Map();
-        localList.forEach((u) => mergedMap.set(u.email, u));
-        firestoreUsers.forEach((u) => mergedMap.set(u.email, u));
+        localList.forEach((u) => mergedMap.set(u.email?.toLowerCase().trim(), u));
+        firestoreUsers.forEach((u) => mergedMap.set(u.email?.toLowerCase().trim(), u));
         return Array.from(mergedMap.values());
       }
     } catch (e) {
@@ -264,14 +332,28 @@ export async function fetchUsersList() {
  * Admin: Delete user from organization
  */
 export async function deleteUserAsAdmin(uid, email) {
+  const cleanEmail = email ? email.toLowerCase().trim() : '';
   if (isConfigValid && db) {
     try {
-      await deleteDoc(doc(db, 'users', uid));
+      if (uid) {
+        await deleteDoc(doc(db, 'users', uid));
+      }
+      if (cleanEmail) {
+        const snap = await getDocs(collection(db, 'users'));
+        for (const d of snap.docs) {
+          const udata = d.data();
+          if (d.id === uid || (udata.email && udata.email.toLowerCase().trim() === cleanEmail)) {
+            await deleteDoc(d.ref);
+          }
+        }
+      }
     } catch (e) {
       console.warn('Could not delete user from Firestore:', e);
     }
   }
-  const current = getLocalUsers().filter((u) => u.uid !== uid && u.email !== email);
+  const current = getLocalUsers().filter(
+    (u) => u.uid !== uid && (!cleanEmail || u.email?.toLowerCase().trim() !== cleanEmail)
+  );
   try {
     localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(current));
   } catch (e) {}

@@ -317,20 +317,20 @@ export default function TicketModal({ isOpen, onClose, onSave, initialTicket = n
                 </select>
               </div>
 
-              {/* Assignee / Engineer */}
+              {/* Ticket Raised By */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Assignee / Engineer
+                  Ticket Raised By (Employee / Team)
                 </label>
                 <input
                   type="text"
-                  list="assignee-list"
-                  placeholder="e.g. Wajid CBRE"
+                  list="raiser-list"
+                  placeholder="e.g. Diksha CBRE, Wajid CBRE"
                   value={formData['Employee Name '] || ''}
                   onChange={(e) => handleChange('Employee Name ', e.target.value)}
                   className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 />
-                <datalist id="assignee-list">
+                <datalist id="raiser-list">
                   {[
                     'Wajid CBRE',
                     'Diksha CBRE',

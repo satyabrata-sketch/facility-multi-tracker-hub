@@ -203,6 +203,19 @@ export default function TicketGrid({
     [onUpdateTicket]
   );
 
+  const onCellKeyDown = useCallback(
+    (params) => {
+      const key = params.event?.key;
+      if (key === 'Delete' && !params.event?.defaultPrevented) {
+        const isEditing = params.api && params.api.getEditingCells ? params.api.getEditingCells().length > 0 : false;
+        if (!isEditing && params.data && onDeleteTicket) {
+          onDeleteTicket(params.data);
+        }
+      }
+    },
+    [onDeleteTicket]
+  );
+
   const columnDefs = useMemo(() => {
     const selectCol = {
       headerName: '',
@@ -275,18 +288,18 @@ export default function TicketGrid({
       cellRenderer: (params) => {
         const row = params.data;
         return (
-          <div className="flex items-center space-x-1 h-full">
+          <div className="flex items-center space-x-1.5 h-full">
             <button
               onClick={() => onEditTicket(row)}
-              className="p-1 rounded text-indigo-600 hover:bg-indigo-50 transition"
-              title="Edit ticket"
+              className="p-1 rounded text-indigo-600 hover:bg-indigo-50 hover:scale-110 transition"
+              title="Edit ticket in form"
             >
               <Edit2 className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => onDeleteTicket(row)}
-              className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
-              title="Delete ticket"
+              className="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-50 hover:scale-110 transition cursor-pointer"
+              title="Delete ticket row"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -500,6 +513,7 @@ export default function TicketGrid({
             onSelectionChanged={onSelectionChanged}
             onFilterChanged={onFilterChanged}
             onCellValueChanged={onCellValueChanged}
+            onCellKeyDown={onCellKeyDown}
             singleClickEdit={true}
             stopEditingWhenCellsLoseFocus={true}
             enterNavigatesVertically={true}

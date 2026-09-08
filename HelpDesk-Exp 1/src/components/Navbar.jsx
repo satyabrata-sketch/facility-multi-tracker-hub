@@ -98,7 +98,7 @@ export default function Navbar({
             </div>
           </div>
 
-          {/* Primary View Switcher Tabs (Tracker Grid vs Analytics Dashboard) */}
+          {/* Primary View Switcher Tabs (Tracker Grid vs Analytics Dashboard vs User Management) */}
           <div className="hidden lg:flex items-center p-1 bg-slate-800/90 rounded-xl border border-slate-700/80 shadow-inner">
             <button
               type="button"
@@ -123,6 +123,18 @@ export default function Navbar({
             >
               <BarChart3 className="w-3.5 h-3.5" />
               <span>Analytics Dashboard</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onTabChange && onTabChange('users')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+                activeTab === 'users'
+                  ? 'bg-purple-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>User Management</span>
             </button>
           </div>
 
@@ -149,6 +161,16 @@ export default function Navbar({
                 title="Analytics Dashboard"
               >
                 <BarChart3 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onTabChange && onTabChange('users')}
+                className={`p-1.5 rounded text-xs font-bold ${
+                  activeTab === 'users' ? 'bg-purple-600 text-white' : 'text-slate-400'
+                }`}
+                title="User Management"
+              >
+                <Users className="w-3.5 h-3.5" />
               </button>
             </div>
 
@@ -184,11 +206,15 @@ export default function Navbar({
 
             {/* Admin User Management */}
             <button
-              onClick={onOpenUsers}
-              className="inline-flex items-center px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700 transition text-xs font-medium"
+              onClick={() => (onTabChange ? onTabChange('users') : onOpenUsers())}
+              className={`inline-flex items-center px-2.5 py-1.5 rounded-lg border transition text-xs font-medium ${
+                activeTab === 'users'
+                  ? 'bg-purple-600 border-purple-500 text-white'
+                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
+              }`}
               title="Admin: Create Users & Manage Team"
             >
-              <Users className="w-3.5 h-3.5 mr-1.5 text-indigo-400" />
+              <Users className="w-3.5 h-3.5 mr-1.5 text-purple-400" />
               <span>Users</span>
             </button>
 
@@ -290,13 +316,13 @@ export default function Navbar({
               </button>
               <button
                 onClick={() => {
-                  onOpenUsers();
+                  onTabChange ? onTabChange('users') : onOpenUsers();
                   setMobileMenuOpen(false);
                 }}
                 className="flex items-center justify-center p-2.5 rounded-xl bg-slate-800 text-xs font-semibold text-slate-200"
               >
-                <Users className="w-4 h-4 mr-1.5 text-indigo-400" />
-                Team
+                <Users className="w-4 h-4 mr-1.5 text-purple-400" />
+                Users
               </button>
               <button
                 onClick={() => {

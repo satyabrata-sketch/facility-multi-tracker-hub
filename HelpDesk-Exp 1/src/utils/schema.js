@@ -278,8 +278,8 @@ export const COLUMNS_SCHEMA = [
       'Prem Infra',
       'Hitesh Infra',
     ],
-    placeholder: 'e.g. Wajid CBRE',
-    description: 'Engineer / Assignee assigned to task',
+    placeholder: 'e.g. Diksha CBRE, Wajid CBRE',
+    description: 'Ticket Raiser / Logged By (Employee or Helpdesk Agent)',
     defaultValue: '',
   },
   {

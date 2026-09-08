@@ -9,6 +9,7 @@ import FirebaseConfigModal from './components/FirebaseConfigModal';
 import ConfirmModal from './components/ConfirmModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import UserManagementModal from './components/UserManagementModal';
+import UserManagementView from './components/UserManagementView';
 import {
   subscribeTickets,
   addTicket,
@@ -164,7 +165,7 @@ export default function App() {
       if (type === 'priority') {
         return (t['Priority'] || 'Medium').trim().toLowerCase() === String(value).trim().toLowerCase();
       }
-      if (type === 'engineer') {
+      if (type === 'engineer' || type === 'raiser') {
         return (t['Employee Name '] || '').trim().toLowerCase().includes(String(value).trim().toLowerCase());
       }
       if (type === 'ticketId') {
@@ -191,6 +192,9 @@ export default function App() {
       ticketData['is On TAT'] = formatTatValue(ticketData['is On TAT']);
 
       if (editingTicket && editingTicket.id) {
+        setTickets((prev) =>
+          prev.map((t) => (t.id === editingTicket.id ? { ...t, ...ticketData } : t))
+        );
         await updateTicket(editingTicket.id, ticketData, userEmail);
       } else {
         if (!ticketData['Sr no.']) {
@@ -200,7 +204,10 @@ export default function App() {
           }, 0);
           ticketData['Sr no.'] = String(maxSr + 1);
         }
-        await addTicket(ticketData, userEmail);
+        const created = await addTicket(ticketData, userEmail);
+        if (created) {
+          setTickets((prev) => [created, ...prev]);
+        }
       }
       setCurrentView('grid');
     } catch (err) {
@@ -221,6 +228,9 @@ export default function App() {
     if (updatedFields['Site ']) {
       updatedFields['Site '] = sanitizeSiteValue(updatedFields['Site ']);
     }
+    setTickets((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, ...updatedFields } : t))
+    );
     return await updateTicket(id, updatedFields, userEmail);
   };
 
@@ -261,6 +271,9 @@ export default function App() {
     };
 
     const created = await addTicket(newTicket, userEmail);
+    if (created) {
+      setTickets((prev) => [created, ...prev]);
+    }
     return created ? created.id : null;
   };
 
@@ -283,6 +296,8 @@ export default function App() {
       confirmVariant: 'danger',
       onConfirm: async () => {
         try {
+          // Instant optimistic local update
+          setTickets((prev) => prev.filter((t) => t.id !== ticket.id));
           await deleteTicket(ticket.id);
         } catch (err) {
           alert('Delete failed: ' + err.message);
@@ -300,6 +315,9 @@ export default function App() {
       confirmVariant: 'danger',
       onConfirm: async () => {
         try {
+          // Instant optimistic local update
+          const idSet = new Set(selectedIds);
+          setTickets((prev) => prev.filter((t) => !idSet.has(t.id)));
           await bulkDeleteTickets(selectedIds);
         } catch (err) {
           alert('Bulk delete failed: ' + err.message);
@@ -422,8 +440,13 @@ export default function App() {
               />
             </ErrorBoundary>
           </div>
+        ) : activeTab === 'users' ? (
+          /* VIEW 2: Dedicated Team & User Management Page */
+          <div className="flex-1 overflow-y-auto bg-slate-50">
+            <UserManagementView currentUser={user} isPage={true} />
+          </div>
         ) : (
-          /* VIEW 2: Tracker Grid or Mobile Card Feed */
+          /* VIEW 3: Tracker Grid or Mobile Card Feed */
           <div className="flex-1 flex flex-col min-h-0 relative">
           {loading ? (
             <div className="flex-1 flex items-center justify-center bg-white">
