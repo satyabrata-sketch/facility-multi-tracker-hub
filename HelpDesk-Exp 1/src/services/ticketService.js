@@ -101,13 +101,79 @@ export async function getCachedTicketsIDB() {
 
 export async function setCachedTicketsIDB(tickets) {
   const idb = await openTicketsIDB();
-  if (!db) return;
+  if (!idb) return;
   try {
     const tx = idb.transaction(IDB_STORE, 'readwrite');
     tx.objectStore(IDB_STORE).put(tickets, 'cached_tickets');
   } catch (e) {
     console.warn('Could not cache tickets in IDB', e);
   }
+}
+
+export function sanitizeTicketForSupabase(ticket) {
+  const yr = String(ticket.year || detectTicketYear(ticket));
+  const sr = String(ticket['Sr no.'] || '');
+  const id = ticket.id ? String(ticket.id) : `sr-${yr}-${sr}`;
+
+  return {
+    id,
+    "Sr no.": sr,
+    "Site ": String(ticket['Site '] || ticket.Site || 'DT3'),
+    "Zone": String(ticket['Zone'] || ''),
+    "Location": String(ticket['Location'] || ''),
+    "Month ": String(ticket['Month '] || ''),
+    "Date ": String(ticket['Date '] || ''),
+    "Report Time": String(ticket['Report Time'] || ''),
+    "Request category": String(ticket['Request category'] || 'Housekeeping'),
+    "Employee Name ": String(ticket['Employee Name '] || ''),
+    "Request Via ": String(ticket['Request Via '] || 'In person'),
+    "Discription ": String(ticket['Discription '] || ticket.Description || ''),
+    "Action Taken ": String(ticket['Action Taken '] || ''),
+    "Date close ": String(ticket['Date close '] || ''),
+    "Resolved time": String(ticket['Resolved time'] || ticket['Close Time'] || ''),
+    "Status ": String(ticket['Status '] || 'Resolved'),
+    "Request from ": String(ticket['Request from '] || 'Employee'),
+    "Call type": String(ticket['Call type'] || 'Reactive'),
+    "Remark": String(ticket['Remark'] || ''),
+    "is On TAT": String(ticket['is On TAT'] || 'Yes'),
+    "Priority": String(ticket['Priority'] || 'Low'),
+    "year": yr,
+    "last_updated_by": String(ticket.lastUpdatedBy || 'system'),
+  };
+}
+
+export async function fetchAllSupabaseTickets() {
+  if (!supabase) return [];
+  const PAGE_SIZE = 1000;
+  let allTickets = [];
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const to = from + PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from('tickets')
+      .select('*')
+      .range(from, to);
+
+    if (error) {
+      console.error('Supabase fetch range error:', error);
+      break;
+    }
+
+    if (data && data.length > 0) {
+      allTickets = allTickets.concat(data);
+      if (data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        from += PAGE_SIZE;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return allTickets;
 }
 
 let localTickets = getInitialLocalTickets();
@@ -169,11 +235,8 @@ export function subscribeTickets(onSuccess, onError) {
   if (isSupabaseConfigValid && supabase) {
     (async () => {
       try {
-        const { data, error } = await supabase.from('tickets').select('*');
-        if (error) {
-          console.error('Supabase query error:', error);
-          if (onError) onError(error);
-        } else if (data && data.length > 0) {
+        const data = await fetchAllSupabaseTickets();
+        if (data && data.length > 0) {
           const sanitized = data
             .filter((t) => !isInvalidPivotOrSummaryRow(t))
             .map((t) => {
@@ -191,12 +254,9 @@ export function subscribeTickets(onSuccess, onError) {
           setCachedTicketsIDB(sanitized);
           onSuccess(sanitized);
         } else {
-          const seedBatch = sampleTickets.slice(0, 150);
-          supabase
-            .from('tickets')
-            .upsert(seedBatch, { onConflict: 'id' })
-            .then(() => onSuccess([...sampleTickets]))
-            .catch(() => onSuccess([...sampleTickets]));
+          // If Supabase table is empty, seed with full dataset
+          onSuccess([...sampleTickets]);
+          batchImportTickets(sampleTickets, 'system-seed').catch(console.warn);
         }
       } catch (err) {
         console.error('Supabase fetch failed:', err);
@@ -209,7 +269,7 @@ export function subscribeTickets(onSuccess, onError) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'tickets' },
         async () => {
-          const { data } = await supabase.from('tickets').select('*');
+          const data = await fetchAllSupabaseTickets();
           if (data && data.length > 0) {
             localTickets = data;
             setCachedTicketsIDB(data);
@@ -586,8 +646,12 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
     let processed = 0;
     for (let i = 0; i < mergedIncoming.length; i += chunkSize) {
       const chunk = mergedIncoming.slice(i, i + chunkSize);
+      const cleanChunk = chunk.map(sanitizeTicketForSupabase);
       try {
-        await supabase.from('tickets').upsert(chunk, { onConflict: 'id' });
+        const { error } = await supabase.from('tickets').upsert(cleanChunk, { onConflict: 'id' });
+        if (error) {
+          console.warn('Supabase batch upsert warning:', error.message);
+        }
       } catch (e) {
         console.warn('Supabase batch import notice:', e);
       }

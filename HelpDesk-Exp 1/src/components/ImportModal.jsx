@@ -28,7 +28,7 @@ export default function ImportModal({
   const [selectedSheet, setSelectedSheet] = useState('');
   const [parsedTickets, setParsedTickets] = useState([]);
   const [duplicatesFiltered, setDuplicatesFiltered] = useState(0);
-  const [skipExistingDups, setSkipExistingDups] = useState(true);
+  const [skipExistingDups, setSkipExistingDups] = useState(false);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState({ processed: 0, total: 0 });
   const [error, setError] = useState(null);

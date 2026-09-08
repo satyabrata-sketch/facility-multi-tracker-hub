@@ -18,8 +18,8 @@ import {
 import { loginWithEmail, SYSTEM_ROLES } from '../firebase/authService';
 
 export default function LoginPage({ onLoginSuccess, onOpenConfig }) {
-  const [email, setEmail] = useState('satyabrata.mohanty1@cbre.com');
-  const [password, setPassword] = useState('Nabindia@123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberDevice, setRememberDevice] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -41,12 +41,6 @@ export default function LoginPage({ onLoginSuccess, onOpenConfig }) {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleQuickLogin = (presetEmail, presetPass = 'Nabindia@123') => {
-    setEmail(presetEmail);
-    setPassword(presetPass);
-    setError(null);
   };
 
   return (
@@ -121,7 +115,7 @@ export default function LoginPage({ onLoginSuccess, onOpenConfig }) {
                   <input
                     type="email"
                     required
-                    placeholder="satyabrata.mohanty1@cbre.com"
+                    placeholder="name@cbre.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full text-xs pl-10 pr-3 py-2.5 bg-slate-950/70 border border-slate-700/80 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition"
@@ -131,14 +125,9 @@ export default function LoginPage({ onLoginSuccess, onOpenConfig }) {
 
               {/* Password Field */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold text-slate-300">
-                    Password
-                  </label>
-                  <span className="text-[11px] text-slate-400">
-                    Admin: <code className="text-emerald-400 font-mono">Nabindia@123</code>
-                  </span>
-                </div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Password
+                </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
                   <input
@@ -152,7 +141,7 @@ export default function LoginPage({ onLoginSuccess, onOpenConfig }) {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200 transition"
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200 transition cursor-pointer"
                     title={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -198,80 +187,6 @@ export default function LoginPage({ onLoginSuccess, onOpenConfig }) {
                 )}
               </button>
             </form>
-
-            {/* Quick Login Presets Divider */}
-            <div className="mt-6 pt-5 border-t border-slate-800">
-              <p className="text-[11px] font-semibold text-slate-400 mb-2.5 flex items-center justify-between">
-                <span>Quick Role Presets:</span>
-                <span className="text-[10px] text-emerald-400 font-normal">Click to fill</span>
-              </p>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('satyabrata.mohanty1@cbre.com', 'Nabindia@123')}
-                  className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-800/40 hover:border-emerald-500/60 text-left transition flex items-center space-x-2 group"
-                >
-                  <div className="w-6 h-6 rounded-md bg-emerald-600/30 text-emerald-400 flex items-center justify-center text-[10px] font-bold">
-                    SA
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-bold text-white group-hover:text-emerald-300 truncate">
-                      Satya (Admin)
-                    </p>
-                    <p className="text-[9px] text-slate-400 truncate">Master Admin</p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('diksha@cbre.com', 'Helpdesk@123')}
-                  className="p-2 rounded-lg bg-slate-800/60 border border-slate-700/60 hover:border-indigo-500/60 text-left transition flex items-center space-x-2 group"
-                >
-                  <div className="w-6 h-6 rounded-md bg-indigo-600/30 text-indigo-400 flex items-center justify-center text-[10px] font-bold">
-                    HD
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-bold text-white group-hover:text-indigo-300 truncate">
-                      Diksha CBRE
-                    </p>
-                    <p className="text-[9px] text-slate-400 truncate">Helpdesk Exec</p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('foe@cbre.com', 'Foe@123')}
-                  className="p-2 rounded-lg bg-slate-800/60 border border-slate-700/60 hover:border-teal-500/60 text-left transition flex items-center space-x-2 group"
-                >
-                  <div className="w-6 h-6 rounded-md bg-teal-600/30 text-teal-400 flex items-center justify-center text-[10px] font-bold">
-                    FO
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-bold text-white group-hover:text-teal-300 truncate">
-                      FOE CBRE
-                    </p>
-                    <p className="text-[9px] text-slate-400 truncate">Front Office</p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('afm@cbre.com', 'Afm@123')}
-                  className="p-2 rounded-lg bg-slate-800/60 border border-slate-700/60 hover:border-purple-500/60 text-left transition flex items-center space-x-2 group"
-                >
-                  <div className="w-6 h-6 rounded-md bg-purple-600/30 text-purple-400 flex items-center justify-center text-[10px] font-bold">
-                    AF
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-bold text-white group-hover:text-purple-300 truncate">
-                      AFM CBRE
-                    </p>
-                    <p className="text-[9px] text-slate-400 truncate">Assistant FM</p>
-                  </div>
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       </main>

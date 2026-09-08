@@ -50,17 +50,25 @@ CREATE TABLE IF NOT EXISTS public.tickets (
   "Action Taken " TEXT,
   "Date close " TEXT,
   "Close Time" TEXT,
+  "Resolved time" TEXT,
   "Total Time " TEXT,
   "TAT (sla)" TEXT,
   "is On TAT" TEXT,
   "Status " TEXT,
+  "Request from " TEXT,
   "Call type" TEXT,
+  "Remark" TEXT,
   "Priority" TEXT,
   "year" TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   last_updated_by TEXT
 );
+
+-- Ensure all columns exist for existing installations
+ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS "Resolved time" TEXT;
+ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS "Request from " TEXT;
+ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS "Remark" TEXT;
 
 -- 2. Create Users Directory Table
 CREATE TABLE IF NOT EXISTS public.app_users (
