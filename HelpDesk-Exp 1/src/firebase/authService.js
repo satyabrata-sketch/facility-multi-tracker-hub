@@ -126,9 +126,54 @@ export function saveUserToLocalDirectory(userRecord) {
   } catch (e) {}
 }
 
+const authSubscribers = new Set();
+
+function notifyAuthSubscribers(user) {
+  authSubscribers.forEach((cb) => {
+    try {
+      cb(user);
+    } catch (e) {
+      console.error('Auth subscriber notification error:', e);
+    }
+  });
+}
+
+export function getCurrentUser() {
+  const hasLoggedOut = localStorage.getItem('cbre_has_logged_out') === 'true';
+
+  // 1. Check persistent localStorage (Remember Device)
+  try {
+    const savedLocal = localStorage.getItem(LOCAL_AUTH_USER_KEY);
+    if (savedLocal) {
+      const parsed = JSON.parse(savedLocal);
+      if (parsed && parsed.email) {
+        return parsed;
+      }
+    }
+  } catch (e) {}
+
+  // 2. Check temporary sessionStorage
+  try {
+    const savedSession = sessionStorage.getItem(LOCAL_AUTH_USER_KEY);
+    if (savedSession) {
+      const parsed = JSON.parse(savedSession);
+      if (parsed && parsed.email) {
+        return parsed;
+      }
+    }
+  } catch (e) {}
+
+  // 3. If the user explicitly logged out or has no saved session, return null
+  return null;
+}
+
 export function subscribeAuth(callback) {
+  authSubscribers.add(callback);
+
+  // If Firebase is configured and initialized, listen to its auth state
+  let fbUnsubscribe = null;
   if (isConfigValid && auth) {
-    return onAuthStateChanged(auth, (user) => {
+    fbUnsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         const isAdmin = isAdminIdentity(user.email);
         const directory = getLocalUsers();
@@ -142,45 +187,26 @@ export function subscribeAuth(callback) {
           isDemo: false,
         };
         localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(userObj));
+        localStorage.removeItem('cbre_has_logged_out');
         callback(userObj);
       } else {
-        const saved = localStorage.getItem(LOCAL_AUTH_USER_KEY);
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            if (parsed && parsed.email) {
-              callback(parsed);
-              return;
-            }
-          } catch (e) {}
-        }
-        callback(null);
+        const current = getCurrentUser();
+        callback(current);
       }
     });
+  } else {
+    // Supabase / Local mode: emit current saved user immediately
+    const current = getCurrentUser();
+    callback(current);
   }
 
-  // Demo mode
-  const saved = localStorage.getItem(LOCAL_AUTH_USER_KEY);
-  if (saved) {
-    try {
-      callback(JSON.parse(saved));
-      return () => {};
-    } catch (e) {}
-  }
-  const defaultUser = {
-    uid: 'user-satya-admin',
-    email: 'satyabrata.mohanty1@cbre.com',
-    displayName: 'Satyabrata Mohanty',
-    role: 'Admin',
-    isDemo: true,
+  return () => {
+    authSubscribers.delete(callback);
+    if (fbUnsubscribe) fbUnsubscribe();
   };
-  localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(defaultUser));
-  callback(defaultUser);
-
-  return () => {};
 }
 
-export async function loginWithEmail(email, password) {
+export async function loginWithEmail(email, password, rememberDevice = true) {
   let cleanEmail = (email || '').trim().toLowerCase();
   if (cleanEmail === 'admin') cleanEmail = 'satyabrata.mohanty1@cbre.com';
 
@@ -191,11 +217,23 @@ export async function loginWithEmail(email, password) {
     throw new Error('Invalid credentials for administrator. Please enter the correct admin password.');
   }
 
+  // Check Supabase 'app_users' table if connected
+  let supaUser = null;
+  if (isSupabaseConfigValid && supabase) {
+    try {
+      const { data } = await supabase.from('app_users').select('*').eq('email', cleanEmail).maybeSingle();
+      if (data) supaUser = data;
+    } catch (e) {
+      console.warn('Supabase app_users lookup notice:', e);
+    }
+  }
+
   // Find user in directory for role and name
   const directory = getLocalUsers();
   const dirMatch = directory.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
-  const assignedRole = isAdmin ? 'Admin' : dirMatch?.role || 'Helpdesk Executive';
+  const assignedRole = isAdmin ? 'Admin' : (supaUser?.role || dirMatch?.role || 'Helpdesk Executive');
   const assignedName =
+    supaUser?.display_name ||
     dirMatch?.displayName ||
     (isAdmin ? 'Satyabrata Mohanty' : cleanEmail.split('@')[0]);
 
@@ -208,8 +246,22 @@ export async function loginWithEmail(email, password) {
         displayName: cred.user.displayName || assignedName,
         role: assignedRole,
         isDemo: false,
+        rememberDevice: Boolean(rememberDevice),
       };
-      localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(userRecord));
+
+      if (rememberDevice) {
+        localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(userRecord));
+        localStorage.setItem('cbre_remember_device', 'true');
+        localStorage.removeItem('cbre_has_logged_out');
+        sessionStorage.removeItem(LOCAL_AUTH_USER_KEY);
+      } else {
+        sessionStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(userRecord));
+        localStorage.removeItem(LOCAL_AUTH_USER_KEY);
+        localStorage.removeItem('cbre_remember_device');
+        localStorage.removeItem('cbre_has_logged_out');
+      }
+
+      notifyAuthSubscribers(userRecord);
       return userRecord;
     } catch (fbErr) {
       console.warn('Firebase auth signIn warning:', fbErr.code);
@@ -223,8 +275,16 @@ export async function loginWithEmail(email, password) {
             displayName: assignedName,
             role: 'Admin',
             isDemo: false,
+            rememberDevice: Boolean(rememberDevice),
           };
-          localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(adminUser));
+          if (rememberDevice) {
+            localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(adminUser));
+            localStorage.setItem('cbre_remember_device', 'true');
+            localStorage.removeItem('cbre_has_logged_out');
+          } else {
+            sessionStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(adminUser));
+          }
+          notifyAuthSubscribers(adminUser);
           return adminUser;
         } catch (createErr) {
           console.warn('Firebase createUser warning:', createErr.code);
@@ -236,23 +296,45 @@ export async function loginWithEmail(email, password) {
           displayName: assignedName,
           role: 'Admin',
           isDemo: false,
+          rememberDevice: Boolean(rememberDevice),
         };
-        localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(adminUser));
+        if (rememberDevice) {
+          localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(adminUser));
+          localStorage.setItem('cbre_remember_device', 'true');
+          localStorage.removeItem('cbre_has_logged_out');
+        } else {
+          sessionStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(adminUser));
+        }
+        notifyAuthSubscribers(adminUser);
         return adminUser;
       }
       throw fbErr;
     }
   }
 
-  // Demo or offline mode
+  // Supabase / Local Mode
   const userRecord = {
-    uid: isAdmin ? 'admin-satya-master' : 'demo-' + Date.now(),
+    uid: supaUser?.uid || (isAdmin ? 'admin-satya-master' : 'user-' + Date.now()),
     email: cleanEmail,
     displayName: assignedName,
     role: assignedRole,
-    isDemo: true,
+    isDemo: !isConfigValid,
+    rememberDevice: Boolean(rememberDevice),
   };
-  localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(userRecord));
+
+  if (rememberDevice) {
+    localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(userRecord));
+    localStorage.setItem('cbre_remember_device', 'true');
+    localStorage.removeItem('cbre_has_logged_out');
+    sessionStorage.removeItem(LOCAL_AUTH_USER_KEY);
+  } else {
+    sessionStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(userRecord));
+    localStorage.removeItem(LOCAL_AUTH_USER_KEY);
+    localStorage.removeItem('cbre_remember_device');
+    localStorage.removeItem('cbre_has_logged_out');
+  }
+
+  notifyAuthSubscribers(userRecord);
   return userRecord;
 }
 
@@ -278,14 +360,24 @@ export async function signupWithEmail(email, password, displayName) {
     isDemo: true,
   };
   localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(demoUser));
+  localStorage.removeItem('cbre_has_logged_out');
+  notifyAuthSubscribers(demoUser);
   return demoUser;
 }
 
 export async function logoutUser() {
   if (isConfigValid && auth) {
-    await fbSignOut(auth);
+    try {
+      await fbSignOut(auth);
+    } catch (e) {}
   }
   localStorage.removeItem(LOCAL_AUTH_USER_KEY);
+  localStorage.removeItem('cbre_remember_device');
+  sessionStorage.removeItem(LOCAL_AUTH_USER_KEY);
+  localStorage.setItem('cbre_has_logged_out', 'true');
+
+  notifyAuthSubscribers(null);
+  return true;
 }
 
 /**

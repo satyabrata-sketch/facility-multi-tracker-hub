@@ -3,6 +3,7 @@ import Navbar from './components/Navbar';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import TicketGrid from './components/TicketGrid';
 import TicketPage from './components/TicketPage';
+import LoginPage from './components/LoginPage';
 import ImportModal from './components/ImportModal';
 import AuthModal from './components/AuthModal';
 import FirebaseConfigModal from './components/FirebaseConfigModal';
@@ -36,6 +37,7 @@ import { Loader2, Plus, Upload, Download, BarChart3, FileSpreadsheet } from 'luc
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [authInitialized, setAuthInitialized] = useState(false);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('tracker'); // 'tracker' | 'analytics'
@@ -64,12 +66,19 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = subscribeAuth((currUser) => {
       setUser(currUser);
+      setAuthInitialized(true);
     });
     return () => unsubscribe();
   }, []);
 
-  // Subscribe to Realtime Tickets
+  // Subscribe to Realtime Tickets (Only when user is authenticated)
   useEffect(() => {
+    if (!user) {
+      setTickets([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
 
     const unsubscribe = subscribeTickets(
@@ -130,7 +139,7 @@ export default function App() {
       }
     );
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
   // Filter tickets by selected year AND active interactive visual filter
   const displayTickets = useMemo(() => {
@@ -392,6 +401,43 @@ export default function App() {
     setActiveTab('tracker'); // Switch to Tracker Grid view to inspect tickets immediately
   };
 
+  // Logout Handler: clears session and immediately redirects to LoginPage
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+    } catch (err) {
+      console.warn('Logout notice:', err);
+    }
+    setUser(null);
+    setActiveVisualFilter(null);
+  };
+
+  // 0. AUTH INITIALIZATION CHECK (Prevents screen flashing while checking device storage)
+  if (!authInitialized) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-300">
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-400 mb-2" />
+        <p className="text-xs text-slate-400 font-medium">Loading CBRE HelpDesk...</p>
+      </div>
+    );
+  }
+
+  // 1. IF NOT AUTHENTICATED: SHOW DEDICATED CBRE LOGIN PAGE
+  if (!user) {
+    return (
+      <>
+        <LoginPage
+          onLoginSuccess={(loggedInUser) => setUser(loggedInUser)}
+          onOpenConfig={() => setConfigModalOpen(true)}
+        />
+        <FirebaseConfigModal
+          isOpen={configModalOpen}
+          onClose={() => setConfigModalOpen(false)}
+        />
+      </>
+    );
+  }
+
   // IF IN DEDICATED TICKET CREATION / EDIT PAGE:
   if (currentView === 'ticketPage') {
     return (
@@ -414,7 +460,7 @@ export default function App() {
       <Navbar
         user={user}
         onOpenAuth={() => setAuthModalOpen(true)}
-        onLogout={logoutUser}
+        onLogout={handleLogout}
         onOpenNewTicket={handleOpenCreatePage}
         onOpenImport={() => setImportModalOpen(true)}
         onExport={handleExportExcel}
