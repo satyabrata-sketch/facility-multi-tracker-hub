@@ -74,15 +74,72 @@ function getInitialLocalTickets() {
   return [...sampleTickets];
 }
 
+// IndexedDB High-Performance Cache for 10k+ Tickets
+const IDB_NAME = 'CBRE_Helpdesk_DB';
+const IDB_STORE = 'tickets_store';
+
+function openTicketsIDB() {
+  return new Promise((resolve) => {
+    if (typeof indexedDB === 'undefined') return resolve(null);
+    try {
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        try {
+          req.result.createObjectStore(IDB_STORE);
+        } catch (e) {}
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
+export async function getCachedTicketsIDB() {
+  const idb = await openTicketsIDB();
+  if (!idb) return null;
+  return new Promise((resolve) => {
+    try {
+      const tx = idb.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get('cached_tickets');
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
+export async function setCachedTicketsIDB(tickets) {
+  const idb = await openTicketsIDB();
+  if (!db) return;
+  try {
+    const tx = idb.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(tickets, 'cached_tickets');
+  } catch (e) {
+    console.warn('Could not cache tickets in IDB', e);
+  }
+}
+
 let localTickets = getInitialLocalTickets();
 let localListeners = [];
 
+// Hydrate localTickets from IndexedDB on startup
+if (typeof window !== 'undefined') {
+  getCachedTicketsIDB().then((cached) => {
+    if (Array.isArray(cached) && cached.length > 0) {
+      localTickets = cached;
+      notifyLocalListeners();
+    }
+  });
+}
+
 function notifyLocalListeners() {
   try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(localTickets));
-  } catch (e) {
-    console.warn('Storage quota reached or error saving to localStorage', e);
-  }
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(localTickets.slice(0, 500)));
+  } catch (e) {}
+  setCachedTicketsIDB(localTickets);
   localListeners.forEach((listener) => listener([...localTickets]));
 }
 
@@ -101,44 +158,64 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * Real-time subscription to tickets collection
+ * Real-time subscription to tickets collection with zero-latency cache-first delivery
  */
 export function subscribeTickets(onSuccess, onError) {
+  // 1. Immediately emit in-memory or sample tickets so UI NEVER displays 0 while loading!
+  if (localTickets && localTickets.length > 0) {
+    onSuccess([...localTickets]);
+  } else {
+    onSuccess([...sampleTickets]);
+  }
+
+  // 2. Check IndexedDB cache asynchronously
+  getCachedTicketsIDB().then((cached) => {
+    if (Array.isArray(cached) && cached.length > 0) {
+      localTickets = cached;
+      onSuccess([...localTickets]);
+    }
+  });
+
   if (isConfigValid && db) {
     try {
       const q = collection(db, COLLECTION_NAME);
       const unsubscribe = onSnapshot(
         q,
         (snapshot) => {
-          const tickets = snapshot.docs
-            .map((d) => {
-              const data = d.data();
-              return {
-                id: d.id,
-                ...data,
-                // Normalize timestamps if they are Firestore Timestamps
-                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
-                updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt,
-              };
-            })
-            .filter((t) => !isInvalidPivotOrSummaryRow(t))
-            .map((t) => {
-              let s = String(t['Site '] || t['Site'] || '').trim();
-              let c = String(t['Request category'] || '').trim();
-              if (VALID_REQUEST_CATEGORIES.includes(s)) {
-                if (!c) t['Request category'] = s;
-                t['Site '] = 'DT3';
-              } else {
-                t['Site '] = sanitizeSiteValue(s);
-              }
-              return t;
-            });
-          onSuccess(tickets);
+          if (!snapshot.empty) {
+            const tickets = snapshot.docs
+              .map((d) => {
+                const data = d.data();
+                return {
+                  id: d.id,
+                  ...data,
+                  createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
+                  updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+                };
+              })
+              .filter((t) => !isInvalidPivotOrSummaryRow(t))
+              .map((t) => {
+                let s = String(t['Site '] || t['Site'] || '').trim();
+                let c = String(t['Request category'] || '').trim();
+                if (VALID_REQUEST_CATEGORIES.includes(s)) {
+                  if (!c) t['Request category'] = s;
+                  t['Site '] = 'DT3';
+                } else {
+                  t['Site '] = sanitizeSiteValue(s);
+                }
+                return t;
+              });
+
+            if (tickets.length > 0) {
+              localTickets = tickets;
+              setCachedTicketsIDB(tickets);
+              onSuccess(tickets);
+            }
+          }
         },
         (error) => {
           console.error('Firestore subscription error:', error);
           if (onError) onError(error);
-          // Fallback to local tickets if firestore rules fail or network error
           onSuccess([...localTickets]);
         }
       );
@@ -152,9 +229,6 @@ export function subscribeTickets(onSuccess, onError) {
 
   // Demo mode: local listener
   localListeners.push(onSuccess);
-  // Send current data immediately
-  setTimeout(() => onSuccess([...localTickets]), 0);
-
   return () => {
     localListeners = localListeners.filter((l) => l !== onSuccess);
   };
@@ -316,6 +390,20 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
   const total = ticketsArray.length;
   const now = new Date().toISOString();
 
+  // 1. Format & merge into local in-memory cache and IndexedDB immediately
+  const formatted = ticketsArray.map((t, idx) => ({
+    ...t,
+    id: t.id || `imported-${Date.now()}-${idx}`,
+    createdAt: t.createdAt || now,
+    updatedAt: t.updatedAt || now,
+    lastUpdatedBy: userEmail,
+  }));
+
+  const existingIds = new Set(localTickets.map((t) => t.id));
+  const newBatch = formatted.filter((t) => !existingIds.has(t.id));
+  localTickets = [...newBatch, ...localTickets];
+  notifyLocalListeners();
+
   if (isConfigValid && db) {
     const chunkSize = 400;
     let processed = 0;
@@ -341,17 +429,6 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
     return processed;
   }
 
-  // Demo mode
-  const formatted = ticketsArray.map((t, idx) => ({
-    ...t,
-    id: t.id || `imported-${Date.now()}-${idx}`,
-    createdAt: now,
-    updatedAt: now,
-    lastUpdatedBy: userEmail,
-  }));
-
-  localTickets = [...formatted, ...localTickets];
-  notifyLocalListeners();
   if (onProgress) onProgress(total, total);
   return total;
 }

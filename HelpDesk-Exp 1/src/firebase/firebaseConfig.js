@@ -1,5 +1,10 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
 // -------------------------------------------------------------
@@ -59,7 +64,19 @@ let auth = null;
 if (isConfigValid) {
   try {
     app = !getApps().length ? initializeApp(currentConfig) : getApp();
-    db = getFirestore(app);
+    if (typeof window !== 'undefined' && typeof indexedDB !== 'undefined') {
+      try {
+        db = initializeFirestore(app, {
+          localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager(),
+          }),
+        });
+      } catch (cacheErr) {
+        db = getFirestore(app);
+      }
+    } else {
+      db = getFirestore(app);
+    }
     auth = getAuth(app);
     console.log('Firebase initialized successfully with project:', currentConfig.projectId);
   } catch (err) {

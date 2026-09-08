@@ -8,6 +8,7 @@ import AuthModal from './components/AuthModal';
 import FirebaseConfigModal from './components/FirebaseConfigModal';
 import ConfirmModal from './components/ConfirmModal';
 import ErrorBoundary from './components/ErrorBoundary';
+import UserManagementModal from './components/UserManagementModal';
 import {
   subscribeTickets,
   addTicket,
@@ -36,7 +37,7 @@ export default function App() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('tracker'); // 'tracker' | 'analytics'
-  const [selectedYear, setSelectedYear] = useState('2026'); // '2026' by default!
+  const [selectedYear, setSelectedYear] = useState('all'); // Show ALL imported tickets by default!
   const [activeVisualFilter, setActiveVisualFilter] = useState(null); // { type, value, label }
 
   // View Mode: 'grid' (main screen) | 'ticketPage' (dedicated full-page creation/edit)
@@ -47,6 +48,7 @@ export default function App() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [userModalOpen, setUserModalOpen] = useState(false);
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     title: '',
@@ -357,6 +359,7 @@ export default function App() {
         activeTab={activeTab}
         onTabChange={(tab) => setActiveTab(tab)}
         onOpenConfig={() => setConfigModalOpen(true)}
+        onOpenUsers={() => setUserModalOpen(true)}
         ticketCount={displayTickets.length}
         selectedYear={selectedYear}
         onSelectYear={(yr) => {
@@ -488,9 +491,20 @@ export default function App() {
         <ImportModal
           isOpen={importModalOpen}
           onClose={() => setImportModalOpen(false)}
-          onImportComplete={() => {}}
+          onImportComplete={() => {
+            setSelectedYear('all');
+            setActiveVisualFilter(null);
+          }}
           userEmail={user ? user.email : 'importer@cbre.com'}
           existingTickets={tickets}
+        />
+      )}
+
+      {userModalOpen && (
+        <UserManagementModal
+          isOpen={userModalOpen}
+          onClose={() => setUserModalOpen(false)}
+          currentUser={user}
         />
       )}
 

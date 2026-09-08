@@ -371,7 +371,7 @@ export async function getExcelSheets(file) {
 /**
  * Parse an Excel sheet into Firestore ticket objects with DEDUPLICATION
  */
-export function parseSheetToTickets(workbook, selectedSheetName, existingTickets = []) {
+export function parseSheetToTickets(workbook, selectedSheetName, existingTickets = [], options = {}) {
   const sheetName = selectedSheetName || workbook.SheetNames[0];
   const worksheet = workbook.Sheets[sheetName];
   if (!worksheet) {
@@ -385,12 +385,15 @@ export function parseSheetToTickets(workbook, selectedSheetName, existingTickets
 
   const tickets = [];
   const seenKeys = new Set();
+  const skipExisting = options?.skipExisting === true;
 
-  // Populate seenKeys from existing database tickets to prevent re-importing duplicates!
-  existingTickets.forEach((t) => {
-    const key = `${t['Sr no.']}_${t['Date ']}_${t['Site ']}_${t['Discription ']}`.trim().toLowerCase();
-    seenKeys.add(key);
-  });
+  // Only populate seenKeys from existing database tickets if skipExisting is explicitly requested!
+  if (skipExisting && Array.isArray(existingTickets)) {
+    existingTickets.forEach((t) => {
+      const key = `${t['Sr no.']}_${t['Date ']}_${t['Site ']}_${t['Discription ']}`.trim().toLowerCase();
+      seenKeys.add(key);
+    });
+  }
 
   let duplicatesFiltered = 0;
 

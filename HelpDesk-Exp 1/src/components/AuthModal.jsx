@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, Mail, User, X, AlertCircle, Sparkles } from 'lucide-react';
+import { Lock, Mail, User, X, AlertCircle } from 'lucide-react';
 import { loginWithEmail, signupWithEmail } from '../firebase/authService';
 
 export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
@@ -29,21 +29,6 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
     } catch (err) {
       console.error(err);
       setError(err.message || 'Authentication failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDemoLogin = async (roleEmail, roleName) => {
-    setError(null);
-    setLoading(true);
-    try {
-      const user = await loginWithEmail(roleEmail, 'demo1234');
-      user.displayName = roleName;
-      onAuthSuccess(user);
-      onClose();
-    } catch (err) {
-      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -141,46 +126,19 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
             {loading ? 'Processing...' : isSignup ? 'Sign Up' : 'Sign In'}
           </button>
 
-          <div className="flex items-center justify-center text-xs text-slate-500 pt-1">
+          <div className="flex items-center justify-center text-xs text-slate-500 pt-2">
             <button
               type="button"
-              onClick={() => setIsSignup(!isSignup)}
-              className="text-indigo-600 hover:underline font-medium"
+              onClick={() => {
+                setIsSignup(!isSignup);
+                setError(null);
+              }}
+              className="text-emerald-600 hover:underline font-semibold"
             >
               {isSignup
                 ? 'Already have an account? Sign In'
-                : "Don't have an account? Sign Up"}
+                : "Need an account? Sign Up"}
             </button>
-          </div>
-
-          {/* One-click demo roles */}
-          <div className="pt-4 border-t border-slate-200">
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-              <Sparkles className="w-3 h-3 text-amber-500" />
-              Quick Demo Login:
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  handleDemoLogin('facilities.lead@cbre.com', 'Facilities Lead (CBRE)')
-                }
-                className="p-2 border border-slate-200 rounded-lg text-left hover:bg-slate-50 transition"
-              >
-                <div className="text-xs font-semibold text-slate-800">Facilities Lead</div>
-                <div className="text-[10px] text-slate-500 truncate">facilities.lead@cbre.com</div>
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  handleDemoLogin('technician@cbre.com', 'Tech Engineer (CBRE)')
-                }
-                className="p-2 border border-slate-200 rounded-lg text-left hover:bg-slate-50 transition"
-              >
-                <div className="text-xs font-semibold text-slate-800">Helpdesk Engineer</div>
-                <div className="text-[10px] text-slate-500 truncate">technician@cbre.com</div>
-              </button>
-            </div>
           </div>
         </form>
       </div>

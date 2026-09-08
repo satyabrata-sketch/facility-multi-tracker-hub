@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   FileSpreadsheet,
+  Users,
 } from 'lucide-react';
 import { isConfigValid } from '../firebase/firebaseConfig';
 
@@ -25,6 +26,7 @@ export default function Navbar({
   activeTab = 'tracker',
   onTabChange,
   onOpenConfig,
+  onOpenUsers,
   ticketCount,
   selectedYear,
   onSelectYear,
@@ -180,6 +182,16 @@ export default function Navbar({
 
             <div className="h-5 w-px bg-slate-800 mx-1"></div>
 
+            {/* Admin User Management */}
+            <button
+              onClick={onOpenUsers}
+              className="inline-flex items-center px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700 transition text-xs font-medium"
+              title="Admin: Create Users & Manage Team"
+            >
+              <Users className="w-3.5 h-3.5 mr-1.5 text-indigo-400" />
+              <span>Users</span>
+            </button>
+
             {/* Settings */}
             <button
               onClick={onOpenConfig}
@@ -275,6 +287,16 @@ export default function Navbar({
               >
                 <Upload className="w-4 h-4 mr-1.5 text-emerald-400" />
                 Import Excel
+              </button>
+              <button
+                onClick={() => {
+                  onOpenUsers();
+                  setMobileMenuOpen(false);
+                }}
+                className="flex items-center justify-center p-2.5 rounded-xl bg-slate-800 text-xs font-semibold text-slate-200"
+              >
+                <Users className="w-4 h-4 mr-1.5 text-indigo-400" />
+                Team
               </button>
               <button
                 onClick={() => {

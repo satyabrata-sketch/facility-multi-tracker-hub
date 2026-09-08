@@ -28,12 +28,22 @@ export default function ImportModal({
   const [selectedSheet, setSelectedSheet] = useState('');
   const [parsedTickets, setParsedTickets] = useState([]);
   const [duplicatesFiltered, setDuplicatesFiltered] = useState(0);
+  const [skipExistingDups, setSkipExistingDups] = useState(false);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState({ processed: 0, total: 0 });
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
 
   if (!isOpen) return null;
+
+  const parseWithSettings = (wb, sheet, skipDups) => {
+    return parseSheetToTickets(
+      wb,
+      sheet,
+      existingTickets,
+      { skipExisting: skipDups }
+    );
+  };
 
   const handleFileChange = async (e) => {
     const selected = e.target.files[0];
@@ -63,11 +73,11 @@ export default function ImportModal({
         eligibleSheets[0];
       setSelectedSheet(defaultSheet);
 
-      // Parse with automatic deduplication!
-      const { tickets, duplicatesFiltered: dupCount } = parseSheetToTickets(
+      // Parse with settings (default: import all unique rows in sheet)
+      const { tickets, duplicatesFiltered: dupCount } = parseWithSettings(
         workbook,
         defaultSheet,
-        existingTickets
+        skipExistingDups
       );
       setParsedTickets(tickets);
       setDuplicatesFiltered(dupCount);
@@ -81,15 +91,32 @@ export default function ImportModal({
     const sheet = e.target.value;
     setSelectedSheet(sheet);
     try {
-      const { tickets, duplicatesFiltered: dupCount } = parseSheetToTickets(
+      const { tickets, duplicatesFiltered: dupCount } = parseWithSettings(
         workbook,
         sheet,
-        existingTickets
+        skipExistingDups
       );
       setParsedTickets(tickets);
       setDuplicatesFiltered(dupCount);
     } catch (err) {
       setError('Error reading sheet: ' + err.message);
+    }
+  };
+
+  const handleToggleSkipDups = (checked) => {
+    setSkipExistingDups(checked);
+    if (workbook && selectedSheet) {
+      try {
+        const { tickets, duplicatesFiltered: dupCount } = parseWithSettings(
+          workbook,
+          selectedSheet,
+          checked
+        );
+        setParsedTickets(tickets);
+        setDuplicatesFiltered(dupCount);
+      } catch (err) {
+        console.error(err);
+      }
     }
   };
 
@@ -272,6 +299,22 @@ export default function ImportModal({
                         ))}
                       </select>
                     </div>
+                  </div>
+
+                  {/* Deduplication Option */}
+                  <div className="flex items-center justify-between p-2.5 bg-slate-100/90 rounded-xl border border-slate-200">
+                    <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={skipExistingDups}
+                        onChange={(e) => handleToggleSkipDups(e.target.checked)}
+                        className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                      />
+                      <span>Filter out rows already existing in database</span>
+                    </label>
+                    <span className="text-[11px] font-semibold text-slate-600">
+                      {skipExistingDups ? 'Strict Dedup' : 'Import All Sheet Rows'}
+                    </span>
                   </div>
 
                   {/* Deduplication & format confirmation */}
