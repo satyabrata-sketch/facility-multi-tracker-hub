@@ -217,7 +217,8 @@ export default function App() {
   };
 
   // Inline Cell Update from AG Grid
-  const handleInlineUpdate = async (id, updatedFields, rowData) => {
+  // Inline Cell Update from AG Grid
+  const handleInlineUpdate = useCallback(async (id, updatedFields, rowData) => {
     const userEmail = user ? user.email : 'colleague@cbre.com';
     const targetId = id || rowData?.id || (rowData?.['Sr no.'] ? String(rowData['Sr no.']) : null);
     if (updatedFields['Month ']) {
@@ -238,21 +239,23 @@ export default function App() {
       })
     );
     return await updateTicket(targetId, updatedFields, userEmail);
-  };
+  }, [user]);
 
   // Direct In-Grid Row Insertion
-  const handleInsertDirectRow = async () => {
+  const handleInsertDirectRow = useCallback(async () => {
     const userEmail = user ? user.email : 'colleague@cbre.com';
-    const maxSr = tickets.reduce((max, t) => {
+    let maxSr = 0;
+    tickets.forEach((t) => {
       const num = parseInt(t['Sr no.'], 10) || 0;
-      return num > max ? num : max;
-    }, 0);
+      if (num > maxSr) maxSr = num;
+    });
 
     const now = new Date();
     const curYear = selectedYear === 'all' ? '2026' : selectedYear;
     const shortMonth = getCurrentShortMonth();
 
     const newTicket = {
+      id: `sr-${maxSr + 1}`,
       'Sr no.': String(maxSr + 1),
       'Site ': 'DT3',
       'Zone': 'Zone A',
@@ -281,46 +284,51 @@ export default function App() {
       setTickets((prev) => [created, ...prev]);
     }
     return created ? created.id : null;
-  };
+  }, [user, selectedYear, tickets]);
 
-  const handleOpenEditPage = (ticket) => {
+  const handleOpenEditPage = useCallback((ticket) => {
     setEditingTicket(ticket);
     setCurrentView('ticketPage');
-  };
+  }, []);
 
-  const handleOpenCreatePage = () => {
+  const handleOpenCreatePage = useCallback(() => {
     setEditingTicket(null);
     setCurrentView('ticketPage');
-  };
+  }, []);
 
-  const handleDeleteTicket = (ticket) => {
+  const handleDeleteTicket = useCallback((ticket) => {
     if (!ticket) return;
     const targetId = ticket.id || (ticket['Sr no.'] ? String(ticket['Sr no.']) : '');
+    const srNo = ticket['Sr no.'] ? String(ticket['Sr no.']) : '';
+
     setConfirmModal({
       isOpen: true,
-      title: `Delete Ticket #${ticket['Sr no.'] || targetId}?`,
+      title: `Delete Ticket #${srNo || targetId}?`,
       message: `Are you sure you want to delete this ticket (${ticket['Discription '] || 'No description'})? This action cannot be undone.`,
       confirmText: 'Delete Ticket',
       confirmVariant: 'danger',
       onConfirm: async () => {
+        // Instant optimistic removal from UI
+        setTickets((prev) =>
+          prev.filter((t) => {
+            if (ticket.id && t.id && String(t.id) === String(ticket.id)) return false;
+            if (srNo && t['Sr no.'] && String(t['Sr no.']) === srNo) return false;
+            if (targetId && t.id && String(t.id) === String(targetId)) return false;
+            if (targetId && t['Sr no.'] && String(t['Sr no.']) === String(targetId)) return false;
+            return true;
+          })
+        );
         try {
-          // Instant optimistic local update
-          setTickets((prev) =>
-            prev.filter((t) => {
-              if (ticket.id && t.id) return String(t.id) !== String(ticket.id);
-              if (ticket['Sr no.'] && t['Sr no.']) return String(t['Sr no.']) !== String(ticket['Sr no.']);
-              return true;
-            })
-          );
-          await deleteTicket(ticket.id, ticket['Sr no.']);
+          await deleteTicket(ticket.id, srNo);
         } catch (err) {
           console.warn('Delete notice:', err);
         }
       },
     });
-  };
+  }, []);
 
-  const handleBulkDelete = (selectedIds) => {
+  const handleBulkDelete = useCallback((selectedIds) => {
+    if (!selectedIds || selectedIds.length === 0) return;
     setConfirmModal({
       isOpen: true,
       title: `Delete ${selectedIds.length} Selected Tickets?`,
@@ -328,30 +336,37 @@ export default function App() {
       confirmText: `Delete ${selectedIds.length} Tickets`,
       confirmVariant: 'danger',
       onConfirm: async () => {
+        const idSet = new Set(selectedIds.map((s) => String(s)));
+        setTickets((prev) =>
+          prev.filter(
+            (t) => !idSet.has(String(t.id)) && !idSet.has(String(t['Sr no.']))
+          )
+        );
         try {
-          // Instant optimistic local update
-          const idSet = new Set(selectedIds.map((s) => String(s)));
-          setTickets((prev) =>
-            prev.filter(
-              (t) => !idSet.has(String(t.id)) && !idSet.has(String(t['Sr no.']))
-            )
-          );
           await bulkDeleteTickets(selectedIds);
         } catch (err) {
           console.warn('Bulk delete notice:', err);
         }
       },
     });
-  };
+  }, []);
 
-  const handleBulkStatus = async (selectedIds, newStatus) => {
+  const handleBulkStatus = useCallback(async (selectedIds, newStatus) => {
     const userEmail = user ? user.email : 'admin@cbre.com';
+    const idSet = new Set(selectedIds.map((s) => String(s)));
+    setTickets((prev) =>
+      prev.map((t) =>
+        idSet.has(String(t.id)) || idSet.has(String(t['Sr no.']))
+          ? { ...t, 'Status ': newStatus }
+          : t
+      )
+    );
     try {
       await bulkUpdateStatus(selectedIds, newStatus, userEmail);
     } catch (err) {
       alert('Bulk status update failed: ' + err.message);
     }
-  };
+  }, [user]);
 
   // Export to Excel: exports separate sheets for 2026 and 2025!
   const handleExportExcel = async () => {
@@ -435,72 +450,16 @@ export default function App() {
       )}
 
       {/* 2. Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {activeTab === 'analytics' ? (
-          /* VIEW 1: Dedicated Full-Screen Analytics Dashboard */
-          <div className="flex-1 overflow-y-auto">
-            <ErrorBoundary>
-              <AnalyticsDashboard
-                allTickets={tickets}
-                selectedYear={selectedYear}
-                onSelectYear={(yr) => {
-                  setSelectedYear(yr);
-                  setActiveVisualFilter(null);
-                }}
-                onFilterGridToReactive={() =>
-                  handleDrilldownFromVisual({
-                    type: 'callType',
-                    value: 'Reactive',
-                    label: 'Call Type: Reactive Complaints',
-                  })
-                }
-                onDrilldownToTracker={handleDrilldownFromVisual}
-              />
-            </ErrorBoundary>
-          </div>
-        ) : activeTab === 'users' ? (
-          /* VIEW 2: Dedicated Team & User Management Page */
-          <div className="flex-1 overflow-y-auto bg-slate-50">
-            <UserManagementView currentUser={user} isPage={true} />
-          </div>
-        ) : (
-          /* VIEW 3: Tracker Grid or Mobile Card Feed */
-          <div className="flex-1 flex flex-col min-h-0 relative">
-          {loading ? (
+      <div className="flex-1 flex flex-col overflow-hidden relative">
+        {/* VIEW 1: Tracker Grid (Kept alive in DOM for instant zero-lag tab switching) */}
+        <div className={`flex-1 flex flex-col min-h-0 ${activeTab === 'tracker' ? '' : 'hidden'}`}>
+          {loading && tickets.length === 0 ? (
             <div className="flex-1 flex items-center justify-center bg-white">
               <div className="flex flex-col items-center space-y-3">
                 <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
                 <p className="text-xs font-semibold text-slate-600">
                   Loading Helpdesk Tracker...
                 </p>
-              </div>
-            </div>
-          ) : displayTickets.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center p-8 bg-white">
-              <div className="text-center max-w-md space-y-4">
-                <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto">
-                  <Upload className="w-8 h-8" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-800">No Tickets Found</h3>
-                  <p className="text-xs text-slate-500 mt-1">
-                    No tickets found for {selectedYear === 'all' ? 'any year' : `FY ${selectedYear}`}.
-                  </p>
-                </div>
-                <div className="flex items-center justify-center gap-3">
-                  <button
-                    onClick={() => setImportModalOpen(true)}
-                    className="px-4 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-xl shadow-sm hover:bg-emerald-500"
-                  >
-                    Import Excel Tracker
-                  </button>
-                  <button
-                    onClick={handleOpenCreatePage}
-                    className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl shadow-sm hover:bg-indigo-500"
-                  >
-                    Create New Ticket
-                  </button>
-                </div>
               </div>
             </div>
           ) : (
@@ -515,7 +474,35 @@ export default function App() {
             />
           )}
         </div>
-      )}
+
+        {/* VIEW 2: Dedicated Full-Screen Analytics Dashboard */}
+        <div className={`flex-1 overflow-y-auto ${activeTab === 'analytics' ? '' : 'hidden'}`}>
+          <ErrorBoundary>
+            <AnalyticsDashboard
+              allTickets={tickets}
+              selectedYear={selectedYear}
+              onSelectYear={(yr) => {
+                setSelectedYear(yr);
+                setActiveVisualFilter(null);
+              }}
+              onFilterGridToReactive={() =>
+                handleDrilldownFromVisual({
+                  type: 'callType',
+                  value: 'Reactive',
+                  label: 'Call Type: Reactive Complaints',
+                })
+              }
+              onDrilldownToTracker={handleDrilldownFromVisual}
+            />
+          </ErrorBoundary>
+        </div>
+
+        {/* VIEW 3: Dedicated Team & User Management Page (Admin only) */}
+        {activeTab === 'users' && (
+          <div className="flex-1 overflow-y-auto bg-slate-50">
+            <UserManagementView currentUser={user} isPage={true} />
+          </div>
+        )}
       </div>
 
       {/* Floating Action Button (FAB) on Mobile Screens */}

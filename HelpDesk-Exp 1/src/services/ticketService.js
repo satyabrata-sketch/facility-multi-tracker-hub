@@ -28,11 +28,8 @@ function getInitialLocalTickets() {
     if (cached) {
       const parsed = JSON.parse(cached);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // 1. Strictly purge all invalid pivot table / summary noise rows!
         const validTickets = parsed.filter((t) => !isInvalidPivotOrSummaryRow(t));
-
-        let hasPending = false;
-        const healed = validTickets.map((t) => {
+        return validTickets.map((t, idx) => {
           let s = String(t['Site '] || t['Site'] || '').trim();
           let c = String(t['Request category'] || '').trim();
           if (VALID_REQUEST_CATEGORIES.includes(s)) {
@@ -41,36 +38,16 @@ function getInitialLocalTickets() {
           } else {
             t['Site '] = sanitizeSiteValue(s);
           }
-          const st = String(t['Status '] || '').trim().toLowerCase();
-          if (st !== 'resolved' && st !== 'closed') hasPending = true;
+          if (!t.id) {
+            t.id = t['Sr no.'] ? `sr-${t['Sr no.']}` : `t-${idx + 1}`;
+          }
           return t;
         });
-
-        // 2. Overwrite localStorage immediately with purged & healed tickets!
-        try {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(healed));
-        } catch (e) {
-          console.warn('Unable to rewrite cached tickets', e);
-        }
-
-        if (!hasPending) {
-          const pendingFromSamples = sampleTickets.filter((t) => {
-            const st = String(t['Status '] || '').trim().toLowerCase();
-            return st !== 'resolved' && st !== 'closed';
-          });
-          const combined = [...pendingFromSamples, ...healed];
-          try {
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(combined));
-          } catch (e) {}
-          return combined;
-        }
-        return healed;
       }
     }
   } catch (e) {
-    console.error('Error loading cached tickets', e);
+    console.warn('Error reading cached tickets:', e);
   }
-  // Default to sample tickets extracted from the real Excel file
   return [...sampleTickets];
 }
 
@@ -136,11 +113,13 @@ if (typeof window !== 'undefined') {
 }
 
 function notifyLocalListeners() {
-  try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(localTickets.slice(0, 500)));
-  } catch (e) {}
   setCachedTicketsIDB(localTickets);
   localListeners.forEach((listener) => listener([...localTickets]));
+  setTimeout(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(localTickets.slice(0, 300)));
+    } catch (e) {}
+  }, 50);
 }
 
 // Listen to other browser tabs in demo mode

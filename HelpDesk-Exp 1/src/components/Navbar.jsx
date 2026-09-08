@@ -5,7 +5,6 @@ import {
   Plus,
   BarChart3,
   Settings,
-  LogOut,
   User,
   Shield,
   ShieldCheck,
@@ -232,14 +231,6 @@ export default function Navbar({
                     </span>
                   </div>
                 </div>
-
-                <button
-                  onClick={onLogout}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
-                  title="Sign Out"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
               </div>
             ) : (
               <button
@@ -361,12 +352,6 @@ export default function Navbar({
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={onLogout}
-                  className="text-rose-400 hover:text-rose-300 font-semibold text-xs ml-2 flex-shrink-0"
-                >
-                  Sign Out
-                </button>
               </div>
             ) : (
               <button

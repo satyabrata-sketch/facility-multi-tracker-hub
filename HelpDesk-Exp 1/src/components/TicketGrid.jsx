@@ -14,13 +14,10 @@ import {
   AlertCircle,
   Columns3,
   ChevronDown,
-  LayoutGrid,
-  Table as TableIcon,
   Filter,
   Plus,
 } from 'lucide-react';
 import { COLUMNS_SCHEMA, sanitizeSiteValue } from '../utils/schema';
-import MobileTicketList from './MobileTicketList';
 
 // Badge renderers
 function StatusBadgeRenderer(params) {
@@ -97,8 +94,6 @@ export default function TicketGrid({
   const [columnVisibilityMenu, setColumnVisibilityMenu] = useState(false);
   const [hiddenColumns, setHiddenColumns] = useState({});
   const [toastMessage, setToastMessage] = useState(null);
-  const [viewMode, setViewMode] = useState('auto'); // 'auto' | 'table' | 'cards'
-  const [isMobileScreen, setIsMobileScreen] = useState(false);
   const [isInserting, setIsInserting] = useState(false);
 
   const handleInsertRow = async () => {
@@ -114,7 +109,7 @@ export default function TicketGrid({
           const api = gridRef.current.api;
           let targetNode = null;
           api.forEachNode((node) => {
-            if (node.data && node.data.id === newId) {
+            if (node.data && (node.data.id === newId || String(node.data['Sr no.']) === String(newId))) {
               targetNode = node;
             }
           });
@@ -145,19 +140,6 @@ export default function TicketGrid({
       setIsInserting(false);
     }
   };
-
-  // Responsive screen size detection
-  useEffect(() => {
-    const checkScreen = () => {
-      setIsMobileScreen(window.innerWidth < 768);
-    };
-    checkScreen();
-    window.addEventListener('resize', checkScreen);
-    return () => window.removeEventListener('resize', checkScreen);
-  }, []);
-
-  const effectiveViewMode =
-    viewMode === 'auto' ? (isMobileScreen ? 'cards' : 'table') : viewMode;
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -227,6 +209,8 @@ export default function TicketGrid({
       sortable: false,
       filter: false,
       resizable: false,
+      editable: false,
+      suppressNavigable: true,
     };
 
     const dataCols = COLUMNS_SCHEMA.map((col) => {
@@ -279,11 +263,13 @@ export default function TicketGrid({
     const actionsCol = {
       headerName: 'Actions',
       field: 'actions',
-      width: 90,
+      width: 85,
       pinned: 'right',
       sortable: false,
       filter: false,
       resizable: false,
+      editable: false,
+      suppressNavigable: true,
       cellRenderer: (params) => {
         const row = params.data;
         if (!row) return null;
@@ -291,9 +277,11 @@ export default function TicketGrid({
           <div className="flex items-center space-x-1.5 h-full">
             <button
               type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                onEditTicket(row);
+                if (onEditTicket) onEditTicket(row);
               }}
               className="p-1 rounded text-indigo-600 hover:bg-indigo-50 hover:scale-110 transition cursor-pointer"
               title="Edit ticket in form"
@@ -302,9 +290,11 @@ export default function TicketGrid({
             </button>
             <button
               type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                onDeleteTicket(row);
+                if (onDeleteTicket) onDeleteTicket(row);
               }}
               className="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-50 hover:scale-110 transition cursor-pointer"
               title="Delete ticket row"
@@ -393,37 +383,8 @@ export default function TicketGrid({
           )}
         </div>
 
-        {/* Right: Controls & View Mode Toggle */}
+        {/* Right: Controls */}
         <div className="flex items-center space-x-2">
-          {/* Mobile View Mode Switcher */}
-          <div className="inline-flex bg-slate-200/70 p-0.5 rounded-lg text-slate-600">
-            <button
-              type="button"
-              onClick={() => setViewMode('cards')}
-              className={`p-1.5 rounded-md text-xs font-semibold flex items-center gap-1 transition ${
-                effectiveViewMode === 'cards'
-                  ? 'bg-white text-indigo-700 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-              title="Mobile Card Feed"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Cards</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('table')}
-              className={`p-1.5 rounded-md text-xs font-semibold flex items-center gap-1 transition ${
-                effectiveViewMode === 'table'
-                  ? 'bg-white text-indigo-700 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-              title="Excel Data Grid"
-            >
-              <TableIcon className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Grid</span>
-            </button>
-          </div>
 
           {/* Bulk Action Bar */}
           {selectedRows.length > 0 && (
@@ -497,56 +458,43 @@ export default function TicketGrid({
         </div>
       </div>
 
-      {/* Main Content Area: Cards View or AG Grid Table */}
-      {effectiveViewMode === 'cards' ? (
-        <div className="flex-1 overflow-y-auto bg-slate-50">
-          <MobileTicketList
-            tickets={displayTickets}
-            onEditTicket={onEditTicket}
-            onDeleteTicket={onDeleteTicket}
-            onQuickStatusChange={(id, newStatus) =>
-              onUpdateTicket(id, { 'Status ': newStatus })
+      {/* Main Content Area: High Performance Virtualized Data Grid */}
+      <div className="flex-1 w-full ag-theme-alpine">
+        <AgGridReact
+          ref={gridRef}
+          rowData={tickets}
+          columnDefs={columnDefs}
+          defaultColDef={defaultColDef}
+          rowSelection="multiple"
+          suppressRowClickSelection={true}
+          onSelectionChanged={onSelectionChanged}
+          onFilterChanged={onFilterChanged}
+          onCellValueChanged={onCellValueChanged}
+          onCellKeyDown={onCellKeyDown}
+          getRowId={(params) =>
+            params.data.id || (params.data['Sr no.'] ? `sr-${params.data['Sr no.']}` : `node-${params.node?.id || Math.random()}`)
+          }
+          onRowDoubleClicked={(params) => {
+            if (params.data && onEditTicket) {
+              onEditTicket(params.data);
             }
-          />
-        </div>
-      ) : (
-        <div className="flex-1 w-full ag-theme-alpine">
-          <AgGridReact
-            ref={gridRef}
-            rowData={tickets}
-            columnDefs={columnDefs}
-            defaultColDef={defaultColDef}
-            rowSelection="multiple"
-            suppressRowClickSelection={true}
-            onSelectionChanged={onSelectionChanged}
-            onFilterChanged={onFilterChanged}
-            onCellValueChanged={onCellValueChanged}
-            onCellKeyDown={onCellKeyDown}
-            getRowId={(params) =>
-              params.data.id || String(params.data['Sr no.']) || `row-${params.data.rowIndex}`
-            }
-            onRowDoubleClicked={(params) => {
-              if (params.data && onEditTicket) {
-                onEditTicket(params.data);
-              }
-            }}
-            singleClickEdit={true}
-            stopEditingWhenCellsLoseFocus={true}
-            enterNavigatesVertically={true}
-            enterNavigatesVerticallyAfterEdit={true}
-            quickFilterText={quickFilter}
-            pagination={true}
-            paginationPageSize={50}
-            paginationPageSizeSelector={[25, 50, 100, 200, 500]}
-            animateRows={true}
-            enableCellTextSelection={true}
-            rowHeight={36}
-            headerHeight={38}
-            suppressHorizontalScroll={false}
-            alwaysShowHorizontalScroll={true}
-          />
-        </div>
-      )}
+          }}
+          singleClickEdit={true}
+          stopEditingWhenCellsLoseFocus={true}
+          enterNavigatesVertically={true}
+          enterNavigatesVerticallyAfterEdit={true}
+          quickFilterText={quickFilter}
+          pagination={true}
+          paginationPageSize={50}
+          paginationPageSizeSelector={[25, 50, 100, 200, 500]}
+          animateRows={false}
+          enableCellTextSelection={true}
+          rowHeight={36}
+          headerHeight={38}
+          suppressHorizontalScroll={false}
+          alwaysShowHorizontalScroll={true}
+        />
+      </div>
 
       {/* Footer */}
       <div className="px-4 py-2 bg-slate-100 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
