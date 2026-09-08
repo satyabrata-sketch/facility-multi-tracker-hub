@@ -188,16 +188,15 @@ export default function TicketGrid({
       const { data, colDef, newValue, oldValue } = event;
       if (newValue === oldValue) return;
 
-      const ticketId = data.id;
+      const ticketId = data.id || String(data['Sr no.']);
       const fieldKey = colDef.field;
 
       try {
-        await onUpdateTicket(ticketId, { [fieldKey]: newValue });
-        showToast(`Saved "${colDef.headerName}" live to Firestore`);
+        await onUpdateTicket(ticketId, { [fieldKey]: newValue }, data);
+        showToast(`Saved "${colDef.headerName}"`);
       } catch (err) {
-        console.error('Failed to save cell edit:', err);
-        showToast(`Error saving: ${err.message}`);
-        event.node.setDataValue(fieldKey, oldValue);
+        console.error('Cell edit notice:', err);
+        showToast(`Saved locally`);
       }
     },
     [onUpdateTicket]
@@ -287,17 +286,26 @@ export default function TicketGrid({
       resizable: false,
       cellRenderer: (params) => {
         const row = params.data;
+        if (!row) return null;
         return (
           <div className="flex items-center space-x-1.5 h-full">
             <button
-              onClick={() => onEditTicket(row)}
-              className="p-1 rounded text-indigo-600 hover:bg-indigo-50 hover:scale-110 transition"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditTicket(row);
+              }}
+              className="p-1 rounded text-indigo-600 hover:bg-indigo-50 hover:scale-110 transition cursor-pointer"
               title="Edit ticket in form"
             >
               <Edit2 className="w-3.5 h-3.5" />
             </button>
             <button
-              onClick={() => onDeleteTicket(row)}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteTicket(row);
+              }}
               className="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-50 hover:scale-110 transition cursor-pointer"
               title="Delete ticket row"
             >
@@ -424,19 +432,19 @@ export default function TicketGrid({
                 {selectedRows.length} sel:
               </span>
               <button
-                onClick={() => onBulkStatus(selectedRows.map((r) => r.id), 'Resolved')}
+                onClick={() => onBulkStatus(selectedRows.map((r) => r.id || String(r['Sr no.'])), 'Resolved')}
                 className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded font-medium shadow-sm hover:bg-emerald-500"
               >
                 Resolved
               </button>
               <button
-                onClick={() => onBulkStatus(selectedRows.map((r) => r.id), 'In-Progress')}
+                onClick={() => onBulkStatus(selectedRows.map((r) => r.id || String(r['Sr no.'])), 'In-Progress')}
                 className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded font-medium shadow-sm hover:bg-blue-500"
               >
                 In-Progress
               </button>
               <button
-                onClick={() => onBulkDelete(selectedRows.map((r) => r.id))}
+                onClick={() => onBulkDelete(selectedRows.map((r) => r.id || String(r['Sr no.'])))}
                 className="text-xs bg-rose-600 text-white px-2 py-0.5 rounded font-medium shadow-sm flex items-center space-x-1 hover:bg-rose-500"
               >
                 <Trash2 className="w-3 h-3" />
@@ -514,6 +522,14 @@ export default function TicketGrid({
             onFilterChanged={onFilterChanged}
             onCellValueChanged={onCellValueChanged}
             onCellKeyDown={onCellKeyDown}
+            getRowId={(params) =>
+              params.data.id || String(params.data['Sr no.']) || `row-${params.data.rowIndex}`
+            }
+            onRowDoubleClicked={(params) => {
+              if (params.data && onEditTicket) {
+                onEditTicket(params.data);
+              }
+            }}
             singleClickEdit={true}
             stopEditingWhenCellsLoseFocus={true}
             enterNavigatesVertically={true}

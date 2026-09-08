@@ -7,14 +7,15 @@ import {
   Settings,
   LogOut,
   User,
+  Shield,
   ShieldCheck,
   Calendar,
   Menu,
   X,
   FileSpreadsheet,
-  Users,
 } from 'lucide-react';
 import { isConfigValid } from '../firebase/firebaseConfig';
+import { isAdminIdentity } from '../firebase/authService';
 
 export default function Navbar({
   user,
@@ -32,6 +33,9 @@ export default function Navbar({
   onSelectYear,
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const isAdmin = Boolean(
+    user && (user.role === 'Admin' || isAdminIdentity(user.email))
+  );
 
   return (
     <header className="bg-slate-900 border-b border-slate-800 text-white sticky top-0 z-30 shadow-md">
@@ -98,7 +102,7 @@ export default function Navbar({
             </div>
           </div>
 
-          {/* Primary View Switcher Tabs (Tracker Grid vs Analytics Dashboard vs User Management) */}
+          {/* Primary View Switcher Tabs (Tracker Grid vs Analytics Dashboard) */}
           <div className="hidden lg:flex items-center p-1 bg-slate-800/90 rounded-xl border border-slate-700/80 shadow-inner">
             <button
               type="button"
@@ -123,18 +127,6 @@ export default function Navbar({
             >
               <BarChart3 className="w-3.5 h-3.5" />
               <span>Analytics Dashboard</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onTabChange && onTabChange('users')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-                activeTab === 'users'
-                  ? 'bg-purple-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>User Management</span>
             </button>
           </div>
 
@@ -161,16 +153,6 @@ export default function Navbar({
                 title="Analytics Dashboard"
               >
                 <BarChart3 className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => onTabChange && onTabChange('users')}
-                className={`p-1.5 rounded text-xs font-bold ${
-                  activeTab === 'users' ? 'bg-purple-600 text-white' : 'text-slate-400'
-                }`}
-                title="User Management"
-              >
-                <Users className="w-3.5 h-3.5" />
               </button>
             </div>
 
@@ -204,19 +186,21 @@ export default function Navbar({
 
             <div className="h-5 w-px bg-slate-800 mx-1"></div>
 
-            {/* Admin User Management */}
-            <button
-              onClick={() => (onTabChange ? onTabChange('users') : onOpenUsers())}
-              className={`inline-flex items-center px-2.5 py-1.5 rounded-lg border transition text-xs font-medium ${
-                activeTab === 'users'
-                  ? 'bg-purple-600 border-purple-500 text-white'
-                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
-              }`}
-              title="Admin: Create Users & Manage Team"
-            >
-              <Users className="w-3.5 h-3.5 mr-1.5 text-purple-400" />
-              <span>Users</span>
-            </button>
+            {/* Dedicated Admin Icon Button - ONLY shown if role is Admin or satyabrata.mohanty1@cbre.com */}
+            {isAdmin && (
+              <button
+                onClick={() => (onTabChange ? onTabChange('users') : onOpenUsers())}
+                className={`inline-flex items-center px-2.5 py-1.5 rounded-lg border transition text-xs font-semibold shadow-sm ${
+                  activeTab === 'users'
+                    ? 'bg-purple-600 border-purple-500 text-white shadow-purple-900/30'
+                    : 'bg-purple-950/40 border-purple-700/50 text-purple-200 hover:bg-purple-900/60 hover:text-white'
+                }`}
+                title="Admin Console: Create & Manage Users (satyabrata.mohanty1@cbre.com)"
+              >
+                <Shield className="w-3.5 h-3.5 mr-1.5 text-purple-400" />
+                <span>Admin</span>
+              </button>
+            )}
 
             {/* Settings */}
             <button
@@ -227,12 +211,31 @@ export default function Navbar({
               <Settings className="w-4 h-4" />
             </button>
 
-            {/* User */}
+            {/* User Profile & Logout */}
             {user ? (
-              <div className="flex items-center space-x-1.5">
+              <div className="flex items-center space-x-2 pl-1.5 border-l border-slate-800">
+                <div className="flex items-center space-x-2 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/70">
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-emerald-500 to-indigo-600 text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 shadow-sm">
+                    {((user.displayName || user.email || 'U')
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')
+                      .slice(0, 2))
+                      .toUpperCase()}
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="text-xs font-bold text-slate-200 leading-tight max-w-[120px] truncate">
+                      {user.displayName || user.email?.split('@')[0]}
+                    </span>
+                    <span className="text-[10px] font-semibold text-emerald-400 leading-none">
+                      {user.role || (isAdmin ? 'Admin' : 'Helpdesk Executive')}
+                    </span>
+                  </div>
+                </div>
+
                 <button
                   onClick={onLogout}
-                  className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
                   title="Sign Out"
                 >
                   <LogOut className="w-4 h-4" />
@@ -241,7 +244,7 @@ export default function Navbar({
             ) : (
               <button
                 onClick={onOpenAuth}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition"
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition shadow-sm"
               >
                 Sign In
               </button>
@@ -314,16 +317,18 @@ export default function Navbar({
                 <Upload className="w-4 h-4 mr-1.5 text-emerald-400" />
                 Import Excel
               </button>
-              <button
-                onClick={() => {
-                  onTabChange ? onTabChange('users') : onOpenUsers();
-                  setMobileMenuOpen(false);
-                }}
-                className="flex items-center justify-center p-2.5 rounded-xl bg-slate-800 text-xs font-semibold text-slate-200"
-              >
-                <Users className="w-4 h-4 mr-1.5 text-purple-400" />
-                Users
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => {
+                    onTabChange ? onTabChange('users') : onOpenUsers();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="flex items-center justify-center p-2.5 rounded-xl bg-purple-900/50 border border-purple-700/60 text-xs font-semibold text-purple-200"
+                >
+                  <Shield className="w-4 h-4 mr-1.5 text-purple-400" />
+                  Admin Console
+                </button>
+              )}
               <button
                 onClick={() => {
                   onOpenConfig();
@@ -337,9 +342,29 @@ export default function Navbar({
             </div>
 
             {user ? (
-              <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/80 text-xs text-slate-300">
-                <span className="truncate">{user.displayName || user.email}</span>
-                <button onClick={onLogout} className="text-rose-400 hover:underline text-[11px]">
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300">
+                <div className="flex items-center space-x-2 min-w-0">
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-emerald-500 to-indigo-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0">
+                    {((user.displayName || user.email || 'U')
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')
+                      .slice(0, 2))
+                      .toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-white text-xs truncate">
+                      {user.displayName || user.email?.split('@')[0]}
+                    </p>
+                    <p className="text-[10px] text-emerald-400 font-semibold">
+                      {user.role || (isAdmin ? 'Admin' : 'Helpdesk Executive')}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={onLogout}
+                  className="text-rose-400 hover:text-rose-300 font-semibold text-xs ml-2 flex-shrink-0"
+                >
                   Sign Out
                 </button>
               </div>

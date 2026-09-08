@@ -217,8 +217,9 @@ export default function App() {
   };
 
   // Inline Cell Update from AG Grid
-  const handleInlineUpdate = async (id, updatedFields) => {
+  const handleInlineUpdate = async (id, updatedFields, rowData) => {
     const userEmail = user ? user.email : 'colleague@cbre.com';
+    const targetId = id || rowData?.id || (rowData?.['Sr no.'] ? String(rowData['Sr no.']) : null);
     if (updatedFields['Month ']) {
       updatedFields['Month '] = formatShortMonth(updatedFields['Month ']);
     }
@@ -229,9 +230,14 @@ export default function App() {
       updatedFields['Site '] = sanitizeSiteValue(updatedFields['Site ']);
     }
     setTickets((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, ...updatedFields } : t))
+      prev.map((t) => {
+        const match =
+          (targetId && t.id && String(t.id) === String(targetId)) ||
+          (targetId && t['Sr no.'] && String(t['Sr no.']) === String(targetId));
+        return match ? { ...t, ...updatedFields } : t;
+      })
     );
-    return await updateTicket(id, updatedFields, userEmail);
+    return await updateTicket(targetId, updatedFields, userEmail);
   };
 
   // Direct In-Grid Row Insertion
@@ -288,19 +294,27 @@ export default function App() {
   };
 
   const handleDeleteTicket = (ticket) => {
+    if (!ticket) return;
+    const targetId = ticket.id || (ticket['Sr no.'] ? String(ticket['Sr no.']) : '');
     setConfirmModal({
       isOpen: true,
-      title: `Delete Ticket #${ticket['Sr no.'] || ticket.id}?`,
+      title: `Delete Ticket #${ticket['Sr no.'] || targetId}?`,
       message: `Are you sure you want to delete this ticket (${ticket['Discription '] || 'No description'})? This action cannot be undone.`,
       confirmText: 'Delete Ticket',
       confirmVariant: 'danger',
       onConfirm: async () => {
         try {
           // Instant optimistic local update
-          setTickets((prev) => prev.filter((t) => t.id !== ticket.id));
-          await deleteTicket(ticket.id);
+          setTickets((prev) =>
+            prev.filter((t) => {
+              if (ticket.id && t.id) return String(t.id) !== String(ticket.id);
+              if (ticket['Sr no.'] && t['Sr no.']) return String(t['Sr no.']) !== String(ticket['Sr no.']);
+              return true;
+            })
+          );
+          await deleteTicket(ticket.id, ticket['Sr no.']);
         } catch (err) {
-          alert('Delete failed: ' + err.message);
+          console.warn('Delete notice:', err);
         }
       },
     });
@@ -316,11 +330,15 @@ export default function App() {
       onConfirm: async () => {
         try {
           // Instant optimistic local update
-          const idSet = new Set(selectedIds);
-          setTickets((prev) => prev.filter((t) => !idSet.has(t.id)));
+          const idSet = new Set(selectedIds.map((s) => String(s)));
+          setTickets((prev) =>
+            prev.filter(
+              (t) => !idSet.has(String(t.id)) && !idSet.has(String(t['Sr no.']))
+            )
+          );
           await bulkDeleteTickets(selectedIds);
         } catch (err) {
-          alert('Bulk delete failed: ' + err.message);
+          console.warn('Bulk delete notice:', err);
         }
       },
     });

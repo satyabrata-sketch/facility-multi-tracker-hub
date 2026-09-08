@@ -20,12 +20,39 @@ import { auth, db, isConfigValid, currentConfig } from './firebaseConfig';
 const LOCAL_AUTH_USER_KEY = 'cbre_helpdesk_demo_user';
 const LOCAL_USERS_KEY = 'cbre_helpdesk_users_directory';
 
+export const SYSTEM_ROLES = [
+  'Admin',
+  'Helpdesk Executive',
+  'FOE',
+  'AFM',
+  'FE soft',
+  'FE Tech',
+  'FM',
+];
+
+export function isAdminIdentity(email) {
+  const e = (email || '').trim().toLowerCase();
+  return (
+    e === 'satyabrata.mohanty1@cbre.com' ||
+    e === 'satyabrata.mohanty@cbre.com' ||
+    e === 'admin@cbre.com' ||
+    e === 'admin'
+  );
+}
+
 export function getLocalUsers() {
   try {
     const raw = localStorage.getItem(LOCAL_USERS_KEY);
     if (raw) return JSON.parse(raw);
   } catch (e) {}
   return [
+    {
+      uid: 'user-satya-admin',
+      email: 'satyabrata.mohanty1@cbre.com',
+      displayName: 'Satyabrata Mohanty',
+      role: 'Admin',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
     {
       uid: 'user-admin-default',
       email: 'admin@cbre.com',
@@ -34,31 +61,52 @@ export function getLocalUsers() {
       createdAt: '2026-01-01T00:00:00.000Z',
     },
     {
-      uid: 'user-satya-default',
-      email: 'satyabrata.mohanty@cbre.com',
-      displayName: 'Satyabrata Mohanty',
-      role: 'Facilities Lead',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    },
-    {
       uid: 'user-diksha-default',
       email: 'diksha@cbre.com',
       displayName: 'Diksha CBRE',
-      role: 'Helpdesk Engineer',
+      role: 'Helpdesk Executive',
       createdAt: '2026-01-15T00:00:00.000Z',
     },
     {
       uid: 'user-wajid-default',
       email: 'wajid@cbre.com',
       displayName: 'Wajid CBRE',
-      role: 'Helpdesk Engineer',
+      role: 'Helpdesk Executive',
       createdAt: '2026-01-15T00:00:00.000Z',
     },
     {
-      uid: 'user-tech-default',
-      email: 'technician@cbre.com',
-      displayName: 'Technician Team',
-      role: 'Technician',
+      uid: 'user-foe-default',
+      email: 'foe@cbre.com',
+      displayName: 'Front Office Executive',
+      role: 'FOE',
+      createdAt: '2026-02-01T00:00:00.000Z',
+    },
+    {
+      uid: 'user-afm-default',
+      email: 'afm@cbre.com',
+      displayName: 'Assistant FM',
+      role: 'AFM',
+      createdAt: '2026-02-01T00:00:00.000Z',
+    },
+    {
+      uid: 'user-fesoft-default',
+      email: 'fe.soft@cbre.com',
+      displayName: 'FE Soft Services',
+      role: 'FE soft',
+      createdAt: '2026-02-01T00:00:00.000Z',
+    },
+    {
+      uid: 'user-fetech-default',
+      email: 'fe.tech@cbre.com',
+      displayName: 'FE Technical',
+      role: 'FE Tech',
+      createdAt: '2026-02-01T00:00:00.000Z',
+    },
+    {
+      uid: 'user-fm-default',
+      email: 'fm@cbre.com',
+      displayName: 'Facilities Manager',
+      role: 'FM',
       createdAt: '2026-02-01T00:00:00.000Z',
     },
   ];
@@ -81,12 +129,15 @@ export function subscribeAuth(callback) {
   if (isConfigValid && auth) {
     return onAuthStateChanged(auth, (user) => {
       if (user) {
-        const isAdmin = user.email?.toLowerCase() === 'admin@cbre.com';
+        const isAdmin = isAdminIdentity(user.email);
+        const directory = getLocalUsers();
+        const dirMatch = directory.find((u) => u.email?.toLowerCase().trim() === user.email?.toLowerCase().trim());
+        const userRole = isAdmin ? 'Admin' : dirMatch?.role || 'Helpdesk Executive';
         const userObj = {
           uid: user.uid,
           email: user.email,
-          displayName: user.displayName || (isAdmin ? 'System Admin' : user.email.split('@')[0]),
-          role: isAdmin ? 'Admin' : 'Facilities Lead',
+          displayName: user.displayName || dirMatch?.displayName || (isAdmin ? 'Satyabrata Mohanty' : user.email.split('@')[0]),
+          role: userRole,
           isDemo: false,
         };
         localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(userObj));
@@ -116,10 +167,10 @@ export function subscribeAuth(callback) {
     } catch (e) {}
   }
   const defaultUser = {
-    uid: 'cbre-demo-lead',
-    email: 'satyabrata.mohanty@cbre.com',
-    displayName: 'Satyabrata Mohanty (Facilities Lead)',
-    role: 'Facilities Lead',
+    uid: 'user-satya-admin',
+    email: 'satyabrata.mohanty1@cbre.com',
+    displayName: 'Satyabrata Mohanty',
+    role: 'Admin',
     isDemo: true,
   };
   localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(defaultUser));
@@ -130,14 +181,22 @@ export function subscribeAuth(callback) {
 
 export async function loginWithEmail(email, password) {
   let cleanEmail = (email || '').trim().toLowerCase();
-  if (cleanEmail === 'admin') cleanEmail = 'admin@cbre.com';
+  if (cleanEmail === 'admin') cleanEmail = 'satyabrata.mohanty1@cbre.com';
 
-  const isAdminEmail = cleanEmail === 'admin@cbre.com' || cleanEmail === 'admin';
+  const isAdmin = isAdminIdentity(cleanEmail);
   const isMasterAdminPassword = password === 'Nabindia@123';
 
-  if (isAdminEmail && !isMasterAdminPassword) {
+  if (isAdmin && !isMasterAdminPassword) {
     throw new Error('Invalid credentials for administrator. Please enter the correct admin password.');
   }
+
+  // Find user in directory for role and name
+  const directory = getLocalUsers();
+  const dirMatch = directory.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
+  const assignedRole = isAdmin ? 'Admin' : dirMatch?.role || 'Helpdesk Executive';
+  const assignedName =
+    dirMatch?.displayName ||
+    (isAdmin ? 'Satyabrata Mohanty' : cleanEmail.split('@')[0]);
 
   if (isConfigValid && auth) {
     try {
@@ -145,22 +204,22 @@ export async function loginWithEmail(email, password) {
       const userRecord = {
         uid: cred.user.uid,
         email: cred.user.email,
-        displayName: cred.user.displayName || (isAdminEmail ? 'System Admin' : cred.user.email.split('@')[0]),
-        role: isAdminEmail ? 'Admin' : 'Facilities Lead',
+        displayName: cred.user.displayName || assignedName,
+        role: assignedRole,
         isDemo: false,
       };
       localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(userRecord));
       return userRecord;
     } catch (fbErr) {
       console.warn('Firebase auth signIn warning:', fbErr.code);
-      if (isAdminEmail && isMasterAdminPassword) {
+      if (isAdmin && isMasterAdminPassword) {
         try {
-          const newCred = await createUserWithEmailAndPassword(auth, 'admin@cbre.com', 'Nabindia@123');
-          await updateProfile(newCred.user, { displayName: 'System Admin' });
+          const newCred = await createUserWithEmailAndPassword(auth, cleanEmail, 'Nabindia@123');
+          await updateProfile(newCred.user, { displayName: assignedName });
           const adminUser = {
             uid: newCred.user.uid,
-            email: 'admin@cbre.com',
-            displayName: 'System Admin',
+            email: cleanEmail,
+            displayName: assignedName,
             role: 'Admin',
             isDemo: false,
           };
@@ -171,9 +230,9 @@ export async function loginWithEmail(email, password) {
         }
 
         const adminUser = {
-          uid: 'admin-master-cbre',
-          email: 'admin@cbre.com',
-          displayName: 'System Admin',
+          uid: 'admin-satya-master',
+          email: cleanEmail,
+          displayName: assignedName,
           role: 'Admin',
           isDemo: false,
         };
@@ -185,27 +244,15 @@ export async function loginWithEmail(email, password) {
   }
 
   // Demo or offline mode
-  if (isAdminEmail && isMasterAdminPassword) {
-    const adminUser = {
-      uid: 'admin-master-cbre',
-      email: 'admin@cbre.com',
-      displayName: 'System Admin',
-      role: 'Admin',
-      isDemo: true,
-    };
-    localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(adminUser));
-    return adminUser;
-  }
-
-  const demoUser = {
-    uid: 'demo-' + Date.now(),
+  const userRecord = {
+    uid: isAdmin ? 'admin-satya-master' : 'demo-' + Date.now(),
     email: cleanEmail,
-    displayName: cleanEmail.split('@')[0],
-    role: isAdminEmail ? 'Admin' : 'Facilities Lead',
+    displayName: assignedName,
+    role: assignedRole,
     isDemo: true,
   };
-  localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(demoUser));
-  return demoUser;
+  localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(userRecord));
+  return userRecord;
 }
 
 export async function signupWithEmail(email, password, displayName) {
@@ -247,7 +294,7 @@ export async function createUserAsAdmin({
   email,
   password,
   displayName,
-  role = 'Helpdesk Engineer',
+  role = 'Helpdesk Executive',
   adminEmail = 'admin@cbre.com',
 }) {
   const cleanEmail = email.trim().toLowerCase();

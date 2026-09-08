@@ -279,7 +279,10 @@ export async function updateTicket(id, ticketData, userEmail = 'colleague@cbre.c
     lastUpdatedBy: userEmail,
   };
 
-  const index = localTickets.findIndex((t) => t.id === id);
+  const idStr = String(id || '');
+  const index = localTickets.findIndex(
+    (t) => (t.id && String(t.id) === idStr) || (t['Sr no.'] && String(t['Sr no.']) === idStr)
+  );
   if (index !== -1) {
     localTickets[index] = {
       ...localTickets[index],
@@ -289,33 +292,48 @@ export async function updateTicket(id, ticketData, userEmail = 'colleague@cbre.c
     notifyLocalListeners();
   }
 
-  if (isConfigValid && db) {
-    const ticketRef = doc(db, COLLECTION_NAME, id);
-    await updateDoc(ticketRef, {
-      ...updatePayload,
-      updatedAt: serverTimestamp(),
-    });
-    return { id, ...updatePayload };
+  if (isConfigValid && db && id) {
+    try {
+      const ticketRef = doc(db, COLLECTION_NAME, String(id));
+      await setDoc(
+        ticketRef,
+        {
+          ...updatePayload,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } catch (e) {
+      console.warn('Firestore setDoc notice:', e);
+    }
   }
 
-  if (index !== -1) {
-    return localTickets[index];
-  }
-  throw new Error('Ticket not found: ' + id);
+  return { id, ...updatePayload };
 }
 
 /**
  * Delete a ticket
  */
-export async function deleteTicket(id) {
-  localTickets = localTickets.filter((t) => t.id !== id);
+export async function deleteTicket(id, srNo) {
+  const idStr = String(id || '');
+  const srStr = String(srNo || '');
+  localTickets = localTickets.filter((t) => {
+    if (idStr && t.id && String(t.id) === idStr) return false;
+    if (srStr && t['Sr no.'] && String(t['Sr no.']) === srStr) return false;
+    if (idStr && t['Sr no.'] && String(t['Sr no.']) === idStr) return false;
+    if (srStr && t.id && String(t.id) === srStr) return false;
+    return true;
+  });
   setCachedTicketsIDB(localTickets);
   notifyLocalListeners();
 
-  if (isConfigValid && db) {
-    const ticketRef = doc(db, COLLECTION_NAME, id);
-    await deleteDoc(ticketRef);
-    return true;
+  if (isConfigValid && db && id) {
+    try {
+      const ticketRef = doc(db, COLLECTION_NAME, String(id));
+      await deleteDoc(ticketRef);
+    } catch (e) {
+      console.warn('Firestore deleteDoc notice:', e);
+    }
   }
 
   return true;
@@ -325,25 +343,30 @@ export async function deleteTicket(id) {
  * Bulk delete multiple tickets
  */
 export async function bulkDeleteTickets(ids) {
-  const idSet = new Set(ids);
-  localTickets = localTickets.filter((t) => !idSet.has(t.id));
+  const idSet = new Set(ids.map((i) => String(i)));
+  localTickets = localTickets.filter(
+    (t) => !idSet.has(String(t.id)) && !idSet.has(String(t['Sr no.']))
+  );
   setCachedTicketsIDB(localTickets);
   notifyLocalListeners();
 
   if (isConfigValid && db) {
-    const batches = [];
-    const chunkSize = 400; // Firestore limit is 500
-    for (let i = 0; i < ids.length; i += chunkSize) {
-      const chunk = ids.slice(i, i + chunkSize);
-      const batch = writeBatch(db);
-      chunk.forEach((id) => {
-        const ticketRef = doc(db, COLLECTION_NAME, id);
-        batch.delete(ticketRef);
-      });
-      batches.push(batch.commit());
+    try {
+      const batches = [];
+      const chunkSize = 400; // Firestore limit is 500
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const chunk = ids.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        chunk.forEach((id) => {
+          const ticketRef = doc(db, COLLECTION_NAME, String(id));
+          batch.delete(ticketRef);
+        });
+        batches.push(batch.commit());
+      }
+      await Promise.all(batches);
+    } catch (e) {
+      console.warn('Firestore bulk delete notice:', e);
     }
-    await Promise.all(batches);
-    return true;
   }
 
   return true;

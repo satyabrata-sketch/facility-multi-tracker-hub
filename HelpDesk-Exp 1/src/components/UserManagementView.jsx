@@ -18,32 +18,44 @@ import {
   createUserAsAdmin,
   fetchUsersList,
   deleteUserAsAdmin,
+  isAdminIdentity,
 } from '../firebase/authService';
 
 export const ROLE_CONFIGS = {
   Admin: {
     color: 'bg-rose-100 text-rose-800 border-rose-200',
-    desc: 'Full administrative access: User management, data import/export, and schema controls',
+    desc: 'Full administrative access: User management, tracker operations, and system controls',
   },
-  'Facilities Lead': {
+  'Helpdesk Executive': {
     color: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-    desc: 'Full operational access: Tracker, analytics, dispatching, and reporting',
+    desc: 'Helpdesk operations: Log tickets, edit, delete, resolve requests, and monitor SLA',
   },
-  'Helpdesk Engineer': {
+  FOE: {
+    color: 'bg-cyan-100 text-cyan-800 border-cyan-200',
+    desc: 'Front Office Executive: Front desk tickets, caller coordination, and service tracking',
+  },
+  AFM: {
     color: 'bg-indigo-100 text-indigo-800 border-indigo-200',
-    desc: 'Daily operations: Create tickets, edit in-place, and resolve requests',
+    desc: 'Assistant Facility Manager: Facility supervision, escalation, edit, and tracking',
   },
-  Technician: {
+  'FE soft': {
+    color: 'bg-teal-100 text-teal-800 border-teal-200',
+    desc: 'Facility Executive Soft Services: Housekeeping, pantry, cleaning, and vendor tasks',
+  },
+  'FE Tech': {
     color: 'bg-amber-100 text-amber-800 border-amber-200',
-    desc: 'Field execution: Update status, action taken, and task remarks',
+    desc: 'Facility Executive Technical: HVAC, electrical, plumbing, and engineering tickets',
   },
-  Viewer: {
-    color: 'bg-slate-100 text-slate-700 border-slate-200',
-    desc: 'Read-only visibility into tracker logs and visual analytics',
+  FM: {
+    color: 'bg-purple-100 text-purple-800 border-purple-200',
+    desc: 'Facility Manager: Site leadership, audits, performance metrics, and operational review',
   },
 };
 
 export default function UserManagementView({ currentUser, isPage = false }) {
+  const isAdmin = Boolean(
+    currentUser && (currentUser.role === 'Admin' || isAdminIdentity(currentUser.email))
+  );
   const [activeTab, setActiveTab] = useState('directory'); // 'directory' | 'create'
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -53,7 +65,7 @@ export default function UserManagementView({ currentUser, isPage = false }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('Helpdesk Engineer');
+  const [role, setRole] = useState('Helpdesk Executive');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState(null);
@@ -80,6 +92,11 @@ export default function UserManagementView({ currentUser, isPage = false }) {
     setFormError(null);
     setFormSuccess(null);
 
+    if (!isAdmin) {
+      setFormError('Access Denied: Only administrators can create user accounts.');
+      return;
+    }
+
     if (password.length < 6) {
       setFormError('Password must be at least 6 characters.');
       return;
@@ -92,7 +109,7 @@ export default function UserManagementView({ currentUser, isPage = false }) {
         password,
         displayName: name,
         role,
-        adminEmail: currentUser?.email || 'admin@cbre.com',
+        adminEmail: currentUser?.email || 'satyabrata.mohanty1@cbre.com',
       });
 
       setFormSuccess(
@@ -101,7 +118,7 @@ export default function UserManagementView({ currentUser, isPage = false }) {
       setName('');
       setEmail('');
       setPassword('');
-      setRole('Helpdesk Engineer');
+      setRole('Helpdesk Executive');
       await loadUsers();
       setTimeout(() => {
         setActiveTab('directory');
@@ -116,6 +133,10 @@ export default function UserManagementView({ currentUser, isPage = false }) {
   };
 
   const handleDeleteUser = async (userToDelete) => {
+    if (!isAdmin) {
+      alert('Access Denied: Only administrators can delete user accounts.');
+      return;
+    }
     if (userToDelete.email?.toLowerCase() === currentUser?.email?.toLowerCase()) {
       alert('You cannot delete your own logged-in account.');
       return;
@@ -171,33 +192,46 @@ export default function UserManagementView({ currentUser, isPage = false }) {
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200 shadow-inner">
-          <button
-            type="button"
-            onClick={() => setActiveTab('directory')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-              activeTab === 'directory'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5 text-purple-600" />
-            <span>Team Directory ({users.length})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('create')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-              activeTab === 'create'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>+ Create New User</span>
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200 shadow-inner">
+            <button
+              type="button"
+              onClick={() => setActiveTab('directory')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+                activeTab === 'directory'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5 text-purple-600" />
+              <span>Team Directory ({users.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('create')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+                activeTab === 'create'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>+ Create New User</span>
+            </button>
+          </div>
+        )}
       </div>
+
+      {!isAdmin && (
+        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Shield className="w-4 h-4 text-amber-600 flex-shrink-0" />
+            <span>
+              <strong>View Only:</strong> Only administrators (<code>satyabrata.mohanty1@cbre.com</code>) can create or delete user accounts. You are logged in with role <strong>{currentUser?.role || 'Team Member'}</strong>.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Main Body */}
       {activeTab === 'create' ? (
@@ -297,10 +331,12 @@ export default function UserManagementView({ currentUser, isPage = false }) {
                 className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white shadow-sm font-medium"
               >
                 <option value="Admin">Admin (Full administrative & user controls)</option>
-                <option value="Facilities Lead">Facilities Lead (All tracker operations & visuals)</option>
-                <option value="Helpdesk Engineer">Helpdesk Engineer (Log tickets, in-grid edits, resolution)</option>
-                <option value="Technician">Technician (Task updates & action logs)</option>
-                <option value="Viewer">Viewer (Read-only)</option>
+                <option value="Helpdesk Executive">Helpdesk Executive (Log tickets, in-grid edits, delete, resolution)</option>
+                <option value="FOE">FOE - Front Office Executive (Desk tickets, caller coordination, dispatch)</option>
+                <option value="AFM">AFM - Assistant Facility Manager (Supervision, approvals & oversight)</option>
+                <option value="FE soft">FE soft - Facility Executive Soft Services (Pantry, cleaning, soft services)</option>
+                <option value="FE Tech">FE Tech - Facility Executive Technical (HVAC, electrical, engineering logs)</option>
+                <option value="FM">FM - Facility Manager (Site leadership & operational audits)</option>
               </select>
               <p className="text-[11px] text-slate-500 mt-1">
                 {ROLE_CONFIGS[role]?.desc}
@@ -342,14 +378,16 @@ export default function UserManagementView({ currentUser, isPage = false }) {
                 className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none shadow-sm"
               />
             </div>
-            <button
-              type="button"
-              onClick={() => setActiveTab('create')}
-              className="w-full sm:w-auto px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center justify-center gap-1.5 flex-shrink-0 cursor-pointer"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>+ Add Team Member</span>
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('create')}
+                className="w-full sm:w-auto px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center justify-center gap-1.5 flex-shrink-0 cursor-pointer"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>+ Add Team Member</span>
+              </button>
+            )}
           </div>
 
           {/* Directory Table */}
@@ -401,20 +439,24 @@ export default function UserManagementView({ currentUser, isPage = false }) {
                         </td>
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           <span className={`px-2.5 py-0.5 text-[11px] font-semibold rounded-full border ${roleStyle}`}>
-                            {u.role || 'Helpdesk Engineer'}
+                            {u.role || 'Helpdesk Executive'}
                           </span>
                         </td>
                         <td className="px-4 py-3.5 text-slate-500 whitespace-nowrap hidden sm:table-cell">
                           {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'Active'}
                         </td>
                         <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                          <button
-                            onClick={() => handleDeleteUser(u)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                            title="Delete user from team"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {isAdmin ? (
+                            <button
+                              onClick={() => handleDeleteUser(u)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                              title="Delete user from team"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 italic">Protected</span>
+                          )}
                         </td>
                       </tr>
                     );
