@@ -16,6 +16,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { auth, db, isConfigValid, currentConfig } from './firebaseConfig';
+import { supabase, isSupabaseConfigValid } from '../supabase/supabaseConfig';
 
 const LOCAL_AUTH_USER_KEY = 'cbre_helpdesk_demo_user';
 const LOCAL_USERS_KEY = 'cbre_helpdesk_users_directory';
@@ -333,6 +334,23 @@ export async function createUserAsAdmin({
     createdBy: adminEmail,
   };
 
+  // Save to Supabase 'app_users' table
+  if (isSupabaseConfigValid && supabase) {
+    try {
+      await supabase.from('app_users').upsert([
+        {
+          uid,
+          email: cleanEmail,
+          display_name: cleanName,
+          role,
+          created_by: adminEmail,
+        },
+      ]);
+    } catch (sbErr) {
+      console.warn('Could not save user to Supabase app_users table:', sbErr);
+    }
+  }
+
   // Save to Firestore 'users' collection
   if (isConfigValid && db) {
     try {
@@ -355,6 +373,28 @@ export async function createUserAsAdmin({
  */
 export async function fetchUsersList() {
   const localList = getLocalUsers();
+
+  if (isSupabaseConfigValid && supabase) {
+    try {
+      const { data, error } = await supabase.from('app_users').select('*');
+      if (!error && data && data.length > 0) {
+        const mapped = data.map((d) => ({
+          uid: d.uid,
+          email: d.email,
+          displayName: d.display_name || d.displayName,
+          role: d.role,
+          createdAt: d.created_at || d.createdAt,
+        }));
+        const mergedMap = new Map();
+        localList.forEach((u) => mergedMap.set(u.email?.toLowerCase().trim(), u));
+        mapped.forEach((u) => mergedMap.set(u.email?.toLowerCase().trim(), u));
+        return Array.from(mergedMap.values());
+      }
+    } catch (e) {
+      console.warn('Could not fetch users from Supabase:', e);
+    }
+  }
+
   if (isConfigValid && db) {
     try {
       const snap = await getDocs(collection(db, 'users'));
@@ -380,6 +420,20 @@ export async function fetchUsersList() {
  */
 export async function deleteUserAsAdmin(uid, email) {
   const cleanEmail = email ? email.toLowerCase().trim() : '';
+
+  if (isSupabaseConfigValid && supabase) {
+    try {
+      if (uid) {
+        await supabase.from('app_users').delete().eq('uid', uid);
+      }
+      if (cleanEmail) {
+        await supabase.from('app_users').delete().eq('email', cleanEmail);
+      }
+    } catch (e) {
+      console.warn('Could not delete user from Supabase:', e);
+    }
+  }
+
   if (isConfigValid && db) {
     try {
       if (uid) {

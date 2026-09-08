@@ -205,7 +205,7 @@ export default function Navbar({
             <button
               onClick={onOpenConfig}
               className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700 transition"
-              title="Firebase Settings"
+              title="Database Settings (Supabase / Firebase)"
             >
               <Settings className="w-4 h-4" />
             </button>

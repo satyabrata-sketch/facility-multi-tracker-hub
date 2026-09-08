@@ -11,6 +11,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db, isConfigValid } from '../firebase/firebaseConfig';
+import { supabase, isSupabaseConfigValid } from '../supabase/supabaseConfig';
 import { sampleTickets } from '../data/sampleTickets';
 import {
   isInvalidPivotOrSummaryRow,
@@ -161,6 +162,64 @@ export function subscribeTickets(onSuccess, onError) {
     }
   });
 
+  if (isSupabaseConfigValid && supabase) {
+    (async () => {
+      try {
+        const { data, error } = await supabase.from('tickets').select('*');
+        if (error) {
+          console.error('Supabase query error:', error);
+          if (onError) onError(error);
+        } else if (data && data.length > 0) {
+          const sanitized = data
+            .filter((t) => !isInvalidPivotOrSummaryRow(t))
+            .map((t) => {
+              let s = String(t['Site '] || t['Site'] || '').trim();
+              let c = String(t['Request category'] || '').trim();
+              if (VALID_REQUEST_CATEGORIES.includes(s)) {
+                if (!c) t['Request category'] = s;
+                t['Site '] = 'DT3';
+              } else {
+                t['Site '] = sanitizeSiteValue(s);
+              }
+              return t;
+            });
+          localTickets = sanitized;
+          setCachedTicketsIDB(sanitized);
+          onSuccess(sanitized);
+        } else {
+          const seedBatch = sampleTickets.slice(0, 150);
+          supabase
+            .from('tickets')
+            .upsert(seedBatch, { onConflict: 'id' })
+            .then(() => onSuccess([...sampleTickets]))
+            .catch(() => onSuccess([...sampleTickets]));
+        }
+      } catch (err) {
+        console.error('Supabase fetch failed:', err);
+      }
+    })();
+
+    const channel = supabase
+      .channel('tickets-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tickets' },
+        async () => {
+          const { data } = await supabase.from('tickets').select('*');
+          if (data && data.length > 0) {
+            localTickets = data;
+            setCachedTicketsIDB(data);
+            onSuccess(data);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }
+
   if (isConfigValid && db) {
     try {
       const q = collection(db, COLLECTION_NAME);
@@ -231,6 +290,16 @@ export async function addTicket(ticketData, userEmail = 'anonymous@cbre.com') {
     lastUpdatedBy: userEmail,
   };
 
+  if (isSupabaseConfigValid && supabase) {
+    const mockId = newTicket.id || 't-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+    const created = { id: mockId, ...newTicket };
+    localTickets.unshift(created);
+    setCachedTicketsIDB(localTickets);
+    notifyLocalListeners();
+    supabase.from('tickets').insert([created]).catch((e) => console.warn('Supabase insert notice:', e));
+    return created;
+  }
+
   if (isConfigValid && db) {
     const docRef = await addDoc(collection(db, COLLECTION_NAME), {
       ...newTicket,
@@ -277,6 +346,14 @@ export async function updateTicket(id, ticketData, userEmail = 'colleague@cbre.c
     notifyLocalListeners();
   }
 
+  if (isSupabaseConfigValid && supabase && id) {
+    supabase
+      .from('tickets')
+      .update(updatePayload)
+      .eq('id', String(id))
+      .catch((e) => console.warn('Supabase update notice:', e));
+  }
+
   if (isConfigValid && db && id) {
     try {
       const ticketRef = doc(db, COLLECTION_NAME, String(id));
@@ -312,6 +389,17 @@ export async function deleteTicket(id, srNo) {
   setCachedTicketsIDB(localTickets);
   notifyLocalListeners();
 
+  if (isSupabaseConfigValid && supabase) {
+    const targetId = id || srNo;
+    if (targetId) {
+      supabase
+        .from('tickets')
+        .delete()
+        .or(`id.eq.${targetId},Sr no..eq.${targetId}`)
+        .catch((e) => console.warn('Supabase delete notice:', e));
+    }
+  }
+
   if (isConfigValid && db && id) {
     try {
       const ticketRef = doc(db, COLLECTION_NAME, String(id));
@@ -334,6 +422,14 @@ export async function bulkDeleteTickets(ids) {
   );
   setCachedTicketsIDB(localTickets);
   notifyLocalListeners();
+
+  if (isSupabaseConfigValid && supabase) {
+    supabase
+      .from('tickets')
+      .delete()
+      .in('id', ids.map(String))
+      .catch((e) => console.warn('Supabase bulk delete notice:', e));
+  }
 
   if (isConfigValid && db) {
     try {
@@ -362,6 +458,30 @@ export async function bulkDeleteTickets(ids) {
  */
 export async function bulkUpdateStatus(ids, newStatus, userEmail = 'admin@cbre.com') {
   const now = new Date().toISOString();
+
+  if (isSupabaseConfigValid && supabase) {
+    const idSet = new Set(ids);
+    localTickets = localTickets.map((t) => {
+      if (idSet.has(t.id)) {
+        return {
+          ...t,
+          'Status ': newStatus,
+          updatedAt: now,
+          lastUpdatedBy: userEmail,
+        };
+      }
+      return t;
+    });
+    setCachedTicketsIDB(localTickets);
+    notifyLocalListeners();
+
+    supabase
+      .from('tickets')
+      .update({ 'Status ': newStatus, updatedAt: now, lastUpdatedBy: userEmail })
+      .in('id', ids.map(String))
+      .catch((e) => console.warn('Supabase bulk status notice:', e));
+    return true;
+  }
 
   if (isConfigValid && db) {
     const batches = [];
@@ -420,7 +540,24 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
   const existingIds = new Set(localTickets.map((t) => t.id));
   const newBatch = formatted.filter((t) => !existingIds.has(t.id));
   localTickets = [...newBatch, ...localTickets];
+  setCachedTicketsIDB(localTickets);
   notifyLocalListeners();
+
+  if (isSupabaseConfigValid && supabase) {
+    const chunkSize = 200;
+    let processed = 0;
+    for (let i = 0; i < total; i += chunkSize) {
+      const chunk = formatted.slice(i, i + chunkSize);
+      try {
+        await supabase.from('tickets').upsert(chunk, { onConflict: 'id' });
+      } catch (e) {
+        console.warn('Supabase batch import notice:', e);
+      }
+      processed += chunk.length;
+      if (onProgress) onProgress(processed, total);
+    }
+    return processed;
+  }
 
   if (isConfigValid && db) {
     const chunkSize = 400;

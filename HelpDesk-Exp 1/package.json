@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.109.0",
     "ag-grid-community": "^31.3.4",
     "ag-grid-react": "^31.3.4",
     "date-fns": "^3.6.0",
