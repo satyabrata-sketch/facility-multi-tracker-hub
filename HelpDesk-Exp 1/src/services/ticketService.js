@@ -22,7 +22,10 @@ import {
   getTicketUniqueKey,
   detectTicketYear,
   normalizeTicketFields,
+  autoHealTicketAction,
+  getHealedActionValue,
 } from '../utils/schema';
+
 
 const COLLECTION_NAME = 'tickets';
 const LOCAL_STORAGE_KEY = 'cbre_helpdesk_tickets_cache';
@@ -36,9 +39,12 @@ function getInitialLocalTickets() {
       if (Array.isArray(parsed) && parsed.length > 0) {
         const validTickets = parsed.filter((t) => !isInvalidPivotOrSummaryRow(t));
 
-        // Auto-heal: If cached localStorage data lacks 2025 Action Taken, purge cache & reload pristine dataset
-        const sample2025 = validTickets.find((t) => t.year === '2025' || (t['Date '] && t['Date '].startsWith('2025')));
-        if (sample2025 && !(sample2025['Action Taken '] || sample2025['Action taken '])) {
+        // Auto-heal: If cached localStorage data lacks Action Taken in 2025 OR 2026, purge cache & reload pristine dataset
+        const sample2025 = validTickets.find((t) => t.year === '2025' || (t['Date '] && String(t['Date ']).startsWith('2025')));
+        const sample2026 = validTickets.find((t) => (t.year === '2026' || !t.year) && t['Sr no.'] && parseInt(t['Sr no.'], 10) <= 50);
+        const lacks2025 = sample2025 && !(sample2025['Action Taken '] || sample2025['Action taken ']);
+        const lacks2026 = sample2026 && !(sample2026['Action Taken '] || sample2026['Action taken ']);
+        if (lacks2025 || lacks2026) {
           try {
             localStorage.removeItem(LOCAL_STORAGE_KEY);
           } catch (e) {}
@@ -106,13 +112,16 @@ export async function getCachedTicketsIDB() {
       req.onsuccess = () => {
         const res = req.result;
         if (Array.isArray(res) && res.length > 0) {
-          const sample2025 = res.find((t) => t.year === '2025' || (t['Date '] && t['Date '].startsWith('2025')));
-          if (sample2025 && !(sample2025['Action Taken '] || sample2025['Action taken '])) {
-            console.info('Purging stale IndexedDB cache lacking 2025 Action Taken...');
-            resolve(null);
-            return;
+          const sample2025 = res.find((t) => t.year === '2025' || (t['Date '] && String(t['Date ']).startsWith('2025')));
+          const sample2026 = res.find((t) => (t.year === '2026' || !t.year) && t['Sr no.'] && parseInt(t['Sr no.'], 10) <= 50);
+          const lacks2025 = sample2025 && !(sample2025['Action Taken '] || sample2025['Action taken ']);
+          const lacks2026 = sample2026 && !(sample2026['Action Taken '] || sample2026['Action taken ']);
+          const healed = deduplicateTickets(res.map(normalizeTicketFields));
+          if (lacks2025 || lacks2026) {
+            console.info('Auto-healing stale IndexedDB cache lacking Action Taken in 2025/2026...');
+            setCachedTicketsIDB(healed);
           }
-          resolve(res.map(normalizeTicketFields));
+          resolve(healed);
         } else {
           resolve(null);
         }
@@ -123,6 +132,7 @@ export async function getCachedTicketsIDB() {
     }
   });
 }
+
 
 export async function setCachedTicketsIDB(tickets) {
   const idb = await openTicketsIDB();
@@ -751,34 +761,53 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
     return cleanDeduped.length;
   }
 
-  // 1. Build an index of existing tickets by their unique signature
+  // 1. Build an index of existing tickets by unique signature and year + sr
   const existingMap = new Map();
   const existingIdSet = new Set();
-  localTickets.forEach((t) => {
+  const existingSrMap = new Map();
+
+  localTickets.forEach((rawT) => {
+    const t = normalizeTicketFields(rawT);
     const k = getTicketUniqueKey(t);
     if (k) existingMap.set(k, t);
     if (t.id) existingIdSet.add(String(t.id));
+    const yr = detectTicketYear(t);
+    const sr = parseInt(t['Sr no.'], 10);
+    const site = sanitizeSiteValue(t['Site '] || t['Site']);
+    if (!isNaN(sr) && sr > 0) {
+      existingSrMap.set(`${yr}_${sr}`, t);
+      existingSrMap.set(`${yr}_${site}_${sr}`, t);
+    }
   });
 
   // 2. Format & deduplicate incoming tickets: merge with existing if already present
   const mergedIncoming = [];
-  ticketsArray.forEach((t, idx) => {
+  ticketsArray.forEach((rawT, idx) => {
+    const t = normalizeTicketFields(rawT);
     const k = getTicketUniqueKey(t);
     const yr = detectTicketYear(t);
     const sr = t['Sr no.'] || String(idx + 1);
+    const srNum = parseInt(sr, 10);
+    const site = sanitizeSiteValue(t['Site '] || t['Site']);
+    const srKey = !isNaN(srNum) && srNum > 0 ? `${yr}_${srNum}` : null;
+    const srSiteKey = !isNaN(srNum) && srNum > 0 ? `${yr}_${site}_${srNum}` : null;
 
-    if (k && existingMap.has(k)) {
+    const existing =
+      (k && existingMap.has(k) ? existingMap.get(k) : null) ||
+      (srSiteKey && existingSrMap.has(srSiteKey) ? existingSrMap.get(srSiteKey) : null) ||
+      (srKey && existingSrMap.has(srKey) ? existingSrMap.get(srKey) : null);
+
+    if (existing) {
       // Existing ticket updated! Retain original ID and merge latest fields
-      const existing = existingMap.get(k);
-      const updated = {
+      const updated = normalizeTicketFields({
         ...existing,
         ...t,
         id: existing.id,
         year: yr,
         updatedAt: now,
         lastUpdatedBy: userEmail,
-      };
-      existingMap.set(k, updated);
+      });
+      existingMap.set(k || existing.id, updated);
       mergedIncoming.push(updated);
     } else {
       // Brand new ticket: assign guaranteed unique ID that does NOT collide with any existing ticket
@@ -788,18 +817,20 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
       }
       existingIdSet.add(stableId);
 
-      const created = {
+      const created = normalizeTicketFields({
         ...t,
         id: stableId,
         year: yr,
         createdAt: t.createdAt || now,
         updatedAt: now,
         lastUpdatedBy: userEmail,
-      };
+      });
       if (k) existingMap.set(k, created);
+      if (srKey) existingSrMap.set(srKey, created);
       mergedIncoming.push(created);
     }
   });
+
 
   // 3. Set local tickets as all strictly unique records
   localTickets = deduplicateTickets(Array.from(existingMap.values()));

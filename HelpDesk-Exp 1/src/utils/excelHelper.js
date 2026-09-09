@@ -13,7 +13,10 @@ import {
   compareMonthsChronologically,
   normalizeTicketFields,
   normalizeDate,
+  autoHealTicketAction,
+  getHealedActionValue,
 } from './schema.js';
+
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -270,7 +273,7 @@ export function getTicketFieldValue(ticket, colKey) {
     return ticket[key];
   }
   if (key === 'Action Taken ' || key === 'Action taken ' || key.trim().toLowerCase() === 'action taken') {
-    return (
+    const act = (
       ticket['Action taken '] ||
       ticket['Action Taken '] ||
       ticket['Action taken'] ||
@@ -280,7 +283,9 @@ export function getTicketFieldValue(ticket, colKey) {
       ticket['action'] ||
       ''
     );
+    return act || getHealedActionValue(ticket) || '';
   }
+
   if (key === 'Discription ') {
     return (
       ticket['Discription '] ||
@@ -1166,9 +1171,17 @@ export function parseSheetToTickets(workbook, selectedSheetName, existingTickets
 
   // Only populate seenKeys from existing database tickets if skipExisting is true and not doing a fresh replacement!
   if (skipExisting && !options?.replaceAll && Array.isArray(existingTickets)) {
-    existingTickets.forEach((t) => {
+    existingTickets.forEach((rawT) => {
+      const t = normalizeTicketFields(rawT);
       const key = getTicketUniqueKey(t);
       if (key) seenKeys.add(key);
+      const yr = detectTicketYear(t);
+      const srNum = parseInt(t['Sr no.'], 10);
+      const site = sanitizeSiteValue(t['Site '] || t['Site']);
+      if (!isNaN(srNum) && srNum > 0) {
+        seenKeys.add(`${yr}_sr_${srNum}`);
+        seenKeys.add(`${yr}_${site}_${srNum}`);
+      }
     });
   }
 
@@ -1214,13 +1227,13 @@ export function parseSheetToTickets(workbook, selectedSheetName, existingTickets
       }
     });
 
-    // Normalize field variations (Action Taken / Action taken, Description, Times, etc.)
-    const normalized = normalizeTicketFields(ticket);
-    Object.assign(ticket, normalized);
-
-    // Detect and skip pivot table / summary rows (e.g. from Helpdesk Summary or calculation sheets)
-    if (isInvalidPivotOrSummaryRow(ticket)) {
-      return; // Skip summary/pivot/total noise row
+    // Detect Year
+    if (!ticket['year']) {
+      if (sheetName.includes('2025') || (ticket['Date '] && ticket['Date '].startsWith('2025'))) {
+        ticket['year'] = '2025';
+      } else {
+        ticket['year'] = '2026';
+      }
     }
 
     // Sanitize Site vs Request Category
@@ -1234,6 +1247,24 @@ export function parseSheetToTickets(workbook, selectedSheetName, existingTickets
       ticket['Site '] = sanitizeSiteValue(siteRaw);
     }
 
+    // Standardize F&B category for food/catering descriptions
+    const curCat = ticket['Request category'] || '';
+    if (!curCat || curCat === 'Housekeeping') {
+      const d = (ticket['Discription '] || '').toLowerCase();
+      if (d.includes('food') || d.includes('catering') || d.includes('breakfast') || d.includes('lunch')) {
+        ticket['Request category'] = 'F&B';
+      }
+    }
+
+    // Normalize field variations and auto-heal Action Taken
+    const normalized = normalizeTicketFields(ticket);
+    Object.assign(ticket, normalized);
+
+    // Detect and skip pivot table / summary rows (e.g. from Helpdesk Summary or calculation sheets)
+    if (isInvalidPivotOrSummaryRow(ticket)) {
+      return; // Skip summary/pivot/total noise row
+    }
+
     // Must have either a valid description, category, or Sr no to be considered a real ticket
     if (!ticket['Discription '] && !ticket['Request category'] && !ticket['Employee Name ']) {
       return; // Skip empty/noise row
@@ -1242,15 +1273,6 @@ export function parseSheetToTickets(workbook, selectedSheetName, existingTickets
     // Status: default to Open if completely missing
     if (!ticket['Status ']) {
       ticket['Status '] = ticket['Date close '] ? 'Resolved' : 'Open';
-    }
-
-    // Detect Year
-    if (!ticket['year']) {
-      if (sheetName.includes('2025') || (ticket['Date '] && ticket['Date '].startsWith('2025'))) {
-        ticket['year'] = '2025';
-      } else {
-        ticket['year'] = '2026';
-      }
     }
 
     if (!ticket['Priority']) {
@@ -1269,15 +1291,29 @@ export function parseSheetToTickets(workbook, selectedSheetName, existingTickets
     }
     ticket.id = ticket.id || `import-${ticket.year || '2026'}-${Date.now().toString(36)}-${index + 1}`;
 
-    // Deduplication check: deterministic unique signature
+    // Deduplication check: deterministic unique signature & Sr no signature
     const dedupKey = getTicketUniqueKey(ticket);
-    if (dedupKey && seenKeys.has(dedupKey)) {
+    const yr = ticket.year || (sheetName.includes('2025') ? '2025' : '2026');
+    const srNum = parseInt(ticket['Sr no.'], 10);
+    const site = ticket['Site '] || 'DT3';
+    const srKey = !isNaN(srNum) && srNum > 0 ? `${yr}_sr_${srNum}` : null;
+    const srSiteKey = !isNaN(srNum) && srNum > 0 ? `${yr}_${site}_${srNum}` : null;
+
+    const isDuplicate =
+      (dedupKey && seenKeys.has(dedupKey)) ||
+      (srKey && seenKeys.has(srKey)) ||
+      (srSiteKey && seenKeys.has(srSiteKey));
+
+    if (isDuplicate) {
       duplicatesFiltered++;
       return; // Skip duplicate!
     }
     if (dedupKey) seenKeys.add(dedupKey);
+    if (srKey) seenKeys.add(srKey);
+    if (srSiteKey) seenKeys.add(srSiteKey);
 
     tickets.push(ticket);
+
   });
 
   return { tickets, duplicatesFiltered };

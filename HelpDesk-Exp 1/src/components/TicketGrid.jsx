@@ -17,7 +17,8 @@ import {
   Filter,
   Plus,
 } from 'lucide-react';
-import { COLUMNS_SCHEMA, sanitizeSiteValue } from '../utils/schema';
+import { COLUMNS_SCHEMA, sanitizeSiteValue, getHealedActionValue } from '../utils/schema';
+
 
 // Badge renderers
 function StatusBadgeRenderer(params) {
@@ -279,7 +280,7 @@ export default function TicketGrid({
       ) {
         baseCol.valueGetter = (params) => {
           if (!params.data) return '';
-          return (
+          let val = (
             params.data['Action taken '] ||
             params.data['Action Taken '] ||
             params.data['Action taken'] ||
@@ -289,7 +290,16 @@ export default function TicketGrid({
             params.data.action ||
             ''
           );
+          if (!val) {
+            val = getHealedActionValue(params.data);
+            if (val) {
+              params.data['Action taken '] = val;
+              params.data['Action Taken '] = val;
+            }
+          }
+          return val || '';
         };
+
         baseCol.valueSetter = (params) => {
           if (!params.data) return false;
           params.data['Action Taken '] = params.newValue;

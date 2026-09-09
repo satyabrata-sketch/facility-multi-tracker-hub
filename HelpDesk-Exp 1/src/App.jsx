@@ -28,7 +28,9 @@ import {
   VALID_REQUEST_CATEGORIES,
   getCurrentShortMonth,
   deduplicateTickets,
+  normalizeTicketFields,
 } from './utils/schema';
+
 import {
   formatShortMonth,
   formatTatValue,
@@ -87,8 +89,9 @@ export default function App() {
         // 1. Strictly purge all invalid pivot/summary noise rows!
         const validTickets = loadedTickets.filter((t) => !isInvalidPivotOrSummaryRow(t));
 
-        // 2. Tag year and normalize short month + Yes/No TAT + sanitize Site & Category
-        const formatted = validTickets.map((t) => {
+        // 2. Tag year and normalize short month + Yes/No TAT + sanitize Site & Category + auto-heal Action Taken
+        const formatted = validTickets.map((rawT) => {
+          const t = normalizeTicketFields(rawT);
           t.year = detectTicketYear(t);
           t['Month '] = formatShortMonth(t['Month '], t.year === '2025' ? '25' : '26');
           t['is On TAT'] = formatTatValue(t['is On TAT']);
@@ -113,8 +116,9 @@ export default function App() {
 
           t['Site '] = site;
           t['Request category'] = cat || 'Housekeeping';
-          return t;
+          return normalizeTicketFields(t);
         });
+
 
         // 3. Strictly eliminate all duplicates, keeping only unique records
         const uniqueTickets = deduplicateTickets(formatted);
@@ -366,8 +370,10 @@ export default function App() {
       'Employee Name ': '',
       'Request Via ': 'In person',
       'Discription ': '',
+      'Action taken ': '',
       'Action Taken ': '',
       'Date close ': '',
+
       'Resolved time': '',
       'Status ': 'Open',
       'Request from ': 'Employee',
