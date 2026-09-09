@@ -205,11 +205,12 @@ export async function fetchAllSupabaseTickets() {
 let localTickets = getInitialLocalTickets();
 let localListeners = [];
 
-// Hydrate localTickets from IndexedDB on startup
+// Hydrate localTickets from IndexedDB on startup with automatic deduplication
 if (typeof window !== 'undefined') {
   getCachedTicketsIDB().then((cached) => {
     if (Array.isArray(cached) && cached.length > 0) {
-      localTickets = cached;
+      localTickets = deduplicateTickets(cached);
+      setCachedTicketsIDB(localTickets);
       notifyLocalListeners();
     }
   });
@@ -717,9 +718,38 @@ export async function bulkUpdateStatus(ids, newStatus, userEmail = 'admin@cbre.c
  * Batch import tickets (e.g. from Excel file)
  * Supports chunks of 450 to stay safely below Firestore 500 limit
  */
-export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbre.com', onProgress) {
+export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbre.com', onProgress, options = {}) {
   const total = ticketsArray.length;
   const now = new Date().toISOString();
+  const replaceAll = options?.replaceAll === true;
+
+  if (replaceAll) {
+    // FRESH IMPORT: Wipe existing database records and replace strictly with clean deduplicated incoming tickets
+    const cleanDeduped = deduplicateTickets(ticketsArray.map(normalizeTicketFields));
+    localTickets = cleanDeduped;
+    setCachedTicketsIDB(localTickets);
+    notifyLocalListeners();
+
+    if (isSupabaseConfigValid && supabase) {
+      try {
+        await supabase.from('tickets').delete().neq('id', '___non_existent___');
+        const chunkSize = 200;
+        let processed = 0;
+        for (let i = 0; i < cleanDeduped.length; i += chunkSize) {
+          const chunk = cleanDeduped.slice(i, i + chunkSize);
+          const cleanChunk = chunk.map(sanitizeTicketForSupabase);
+          await supabase.from('tickets').upsert(cleanChunk, { onConflict: 'id' });
+          processed += chunk.length;
+          if (onProgress) onProgress(processed, total);
+        }
+      } catch (e) {
+        console.warn('Supabase fresh import warning:', e);
+      }
+    }
+
+    if (onProgress) onProgress(total, total);
+    return cleanDeduped.length;
+  }
 
   // 1. Build an index of existing tickets by their unique signature
   const existingMap = new Map();
@@ -828,6 +858,26 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
 
   if (onProgress) onProgress(total, total);
   return total;
+}
+
+/**
+ * Completely clear all tickets from local state, IndexedDB, localStorage, and backend
+ */
+export async function clearAllTickets() {
+  localTickets = [];
+  setCachedTicketsIDB([]);
+  try {
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
+  } catch (e) {}
+  notifyLocalListeners();
+
+  if (isSupabaseConfigValid && supabase) {
+    try {
+      await supabase.from('tickets').delete().neq('id', '___non_existent___');
+    } catch (e) {
+      console.warn('Supabase clear notice:', e);
+    }
+  }
 }
 
 /**

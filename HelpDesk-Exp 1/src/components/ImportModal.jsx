@@ -9,9 +9,12 @@ import {
   ArrowRight,
   Database,
   Filter,
+  Trash2,
+  Sparkles,
+  RefreshCw,
 } from 'lucide-react';
 import { getExcelSheets, parseSheetToTickets } from '../utils/excelHelper';
-import { batchImportTickets } from '../services/ticketService';
+import { batchImportTickets, clearAllTickets, purgeAllDuplicates } from '../services/ticketService';
 import { sampleTickets } from '../data/sampleTickets';
 import { COLUMNS_SCHEMA, deduplicateTickets } from '../utils/schema';
 
@@ -28,22 +31,28 @@ export default function ImportModal({
   const [selectedSheet, setSelectedSheet] = useState('');
   const [parsedTickets, setParsedTickets] = useState([]);
   const [duplicatesFiltered, setDuplicatesFiltered] = useState(0);
-  const [skipExistingDups, setSkipExistingDups] = useState(false);
+  const [importMode, setImportMode] = useState('fresh'); // 'fresh' (Replace All) | 'merge' (Skip Existing Duplicates)
+  const [skipExistingDups, setSkipExistingDups] = useState(true);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState({ processed: 0, total: 0 });
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [purgeSuccessMsg, setPurgeSuccessMsg] = useState(null);
 
   if (!isOpen) return null;
 
-  const parseWithSettings = (wb, sheet, skipDups, availableSheets = sheetNames) => {
+  const parseWithSettings = (wb, sheet, skipDups, mode = importMode, availableSheets = sheetNames) => {
+    const isFresh = mode === 'fresh';
     if (sheet === '__ALL_SHEETS__') {
       let combined = [];
       let totalDups = 0;
       const targetSheets = availableSheets.filter((s) => s !== '__ALL_SHEETS__');
       targetSheets.forEach((s) => {
         try {
-          const res = parseSheetToTickets(wb, s, existingTickets, { skipExisting: skipDups });
+          const res = parseSheetToTickets(wb, s, existingTickets, {
+            skipExisting: isFresh ? false : skipDups,
+            replaceAll: isFresh,
+          });
           combined = combined.concat(res.tickets);
           totalDups += res.duplicatesFiltered;
         } catch (e) {
@@ -56,7 +65,10 @@ export default function ImportModal({
       wb,
       sheet,
       existingTickets,
-      { skipExisting: skipDups }
+      {
+        skipExisting: isFresh ? false : skipDups,
+        replaceAll: isFresh,
+      }
     );
   };
 
@@ -89,11 +101,12 @@ export default function ImportModal({
         combinedOptions[0];
       setSelectedSheet(defaultSheet);
 
-      // Parse with settings (default: import all unique rows in sheet)
+      // Parse with settings (default: fresh import mode)
       const { tickets, duplicatesFiltered: dupCount } = parseWithSettings(
         workbook,
         defaultSheet,
         skipExistingDups,
+        importMode,
         combinedOptions
       );
       setParsedTickets(tickets);
@@ -111,12 +124,31 @@ export default function ImportModal({
       const { tickets, duplicatesFiltered: dupCount } = parseWithSettings(
         workbook,
         sheet,
-        skipExistingDups
+        skipExistingDups,
+        importMode
       );
       setParsedTickets(tickets);
       setDuplicatesFiltered(dupCount);
     } catch (err) {
       setError('Error reading sheet: ' + err.message);
+    }
+  };
+
+  const handleImportModeChange = (newMode) => {
+    setImportMode(newMode);
+    if (workbook && selectedSheet) {
+      try {
+        const { tickets, duplicatesFiltered: dupCount } = parseWithSettings(
+          workbook,
+          selectedSheet,
+          skipExistingDups,
+          newMode
+        );
+        setParsedTickets(tickets);
+        setDuplicatesFiltered(dupCount);
+      } catch (err) {
+        console.error(err);
+      }
     }
   };
 
@@ -127,7 +159,8 @@ export default function ImportModal({
         const { tickets, duplicatesFiltered: dupCount } = parseWithSettings(
           workbook,
           selectedSheet,
-          checked
+          checked,
+          importMode
         );
         setParsedTickets(tickets);
         setDuplicatesFiltered(dupCount);
@@ -149,7 +182,8 @@ export default function ImportModal({
         userEmail || 'admin@cbre.com',
         (processed, total) => {
           setProgress({ processed, total });
-        }
+        },
+        { replaceAll: importMode === 'fresh' }
       );
       setSuccess(true);
       if (onImportComplete) {
@@ -160,6 +194,35 @@ export default function ImportModal({
       setError('Import failed: ' + err.message);
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handlePurgeDuplicates = () => {
+    try {
+      const removed = purgeAllDuplicates();
+      setPurgeSuccessMsg(`Successfully purged ${removed} duplicate records! Total unique tickets intact.`);
+      if (onImportComplete) {
+        onImportComplete();
+      }
+      setTimeout(() => setPurgeSuccessMsg(null), 6000);
+    } catch (err) {
+      setError('Purge failed: ' + err.message);
+    }
+  };
+
+  const handleClearAllData = async () => {
+    if (!window.confirm('Are you sure you want to wipe all tickets from the database for a fresh import?')) {
+      return;
+    }
+    try {
+      await clearAllTickets();
+      setPurgeSuccessMsg('Database cleared successfully! You can now import your fresh Excel file.');
+      if (onImportComplete) {
+        onImportComplete();
+      }
+      setTimeout(() => setPurgeSuccessMsg(null), 6000);
+    } catch (err) {
+      setError('Clear failed: ' + err.message);
     }
   };
 
@@ -174,7 +237,8 @@ export default function ImportModal({
         userEmail || 'admin@cbre.com',
         (processed, total) => {
           setProgress({ processed, total });
-        }
+        },
+        { replaceAll: true }
       );
       setSuccess(true);
       if (onImportComplete) {
@@ -194,6 +258,7 @@ export default function ImportModal({
     setDuplicatesFiltered(0);
     setSuccess(false);
     setError(null);
+    setPurgeSuccessMsg(null);
     onClose();
   };
 
@@ -250,6 +315,13 @@ export default function ImportModal({
                 </div>
               )}
 
+              {purgeSuccessMsg && (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-800 flex items-center space-x-2 font-medium shadow-sm">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <span>{purgeSuccessMsg}</span>
+                </div>
+              )}
+
               {!workbook ? (
                 <div className="space-y-4">
                   <label className="border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer bg-slate-50 hover:bg-slate-100/60 transition group">
@@ -268,34 +340,65 @@ export default function ImportModal({
                     </span>
                   </label>
 
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-200">
-                    <span className="text-xs text-slate-500">
-                      Want to load all 11,600+ pre-parsed tickets directly?
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleImportSampleData}
-                      disabled={importing}
-                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
-                    >
-                      <Database className="w-3.5 h-3.5" />
-                      Load All Multi-Year Excel Tickets (11,600+)
-                    </button>
+                  {/* Database Maintenance Utilities */}
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                        Database Utilities & Quick Actions
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Current: <strong>{existingTickets.length}</strong> tickets
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={handlePurgeDuplicates}
+                        className="px-3 py-2 bg-white hover:bg-emerald-50 border border-slate-300 hover:border-emerald-400 text-slate-700 hover:text-emerald-700 text-xs font-semibold rounded-lg shadow-sm transition flex items-center justify-center gap-1.5"
+                        title="Remove duplicate tickets from database"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 text-emerald-600" />
+                        Purge Duplicates Now
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleClearAllData}
+                        className="px-3 py-2 bg-white hover:bg-rose-50 border border-slate-300 hover:border-rose-400 text-slate-700 hover:text-rose-700 text-xs font-semibold rounded-lg shadow-sm transition flex items-center justify-center gap-1.5"
+                        title="Wipe database to prepare for fresh import"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        Clear All Data
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleImportSampleData}
+                        disabled={importing}
+                        className="px-3 py-2 bg-white hover:bg-indigo-50 border border-slate-300 hover:border-indigo-400 text-slate-700 hover:text-indigo-700 text-xs font-semibold rounded-lg shadow-sm transition flex items-center justify-center gap-1.5"
+                        title="Load pristine pre-parsed dataset"
+                      >
+                        <Database className="w-3.5 h-3.5 text-indigo-600" />
+                        Reset to Clean Baseline
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {/* Sheet Selector */}
-                  <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200">
-                    <div className="flex items-center space-x-2">
-                      <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                  {/* Sheet Selector & Count */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                    <div className="flex items-center space-x-2.5">
+                      <FileSpreadsheet className="w-6 h-6 text-emerald-600 flex-shrink-0" />
                       <div>
-                        <p className="text-xs font-semibold text-slate-800">{file?.name}</p>
+                        <p className="text-xs font-bold text-slate-900">{file?.name}</p>
                         <p className="text-[11px] text-slate-500">
-                          Found <strong className="text-emerald-700">{parsedTickets.length} unique tickets</strong>
+                          Ready to import: <strong className="text-emerald-700">{parsedTickets.length} unique tickets</strong>
                           {duplicatesFiltered > 0 && (
-                            <span className="text-amber-700 ml-1">
-                              (filtered {duplicatesFiltered} duplicates)
+                            <span className="text-amber-700 ml-1 font-semibold">
+                              ({duplicatesFiltered} duplicates filtered)
                             </span>
                           )}
                         </p>
@@ -303,11 +406,11 @@ export default function ImportModal({
                     </div>
 
                     <div className="flex items-center space-x-2">
-                      <label className="text-xs font-medium text-slate-600">Sheet:</label>
+                      <label className="text-xs font-semibold text-slate-700">Sheet:</label>
                       <select
                         value={selectedSheet}
                         onChange={handleSheetChange}
-                        className="text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg shadow-sm font-medium"
+                        className="text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg shadow-sm font-semibold text-slate-800"
                       >
                         {sheetNames.map((s) => (
                           <option key={s} value={s}>
@@ -318,32 +421,78 @@ export default function ImportModal({
                     </div>
                   </div>
 
-                  {/* Deduplication Option */}
-                  <div className="flex items-center justify-between p-2.5 bg-slate-100/90 rounded-xl border border-slate-200">
-                    <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={skipExistingDups}
-                        onChange={(e) => handleToggleSkipDups(e.target.checked)}
-                        className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                      />
-                      <span>Filter out rows already existing in database</span>
+                  {/* Mode Selector: Fresh Start vs Merge */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
+                      Import Mode
                     </label>
-                    <span className="text-[11px] font-semibold text-slate-600">
-                      {skipExistingDups ? 'Strict Dedup' : 'Import All Sheet Rows'}
-                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {/* Option 1: Fresh Start */}
+                      <div
+                        onClick={() => handleImportModeChange('fresh')}
+                        className={`p-3 rounded-xl border cursor-pointer transition flex items-start gap-2.5 ${
+                          importMode === 'fresh'
+                            ? 'bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm'
+                            : 'bg-white border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="importMode"
+                          checked={importMode === 'fresh'}
+                          onChange={() => handleImportModeChange('fresh')}
+                          className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                            <span>Fresh Start (Replace All Data)</span>
+                            <span className="px-1.5 py-0.2 rounded bg-emerald-600 text-white text-[9px] font-bold">Recommended</span>
+                          </p>
+                          <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">
+                            Replaces existing tickets with the fresh Excel sheet. Automatically eliminates all previous duplicates!
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Option 2: Merge & Deduplicate */}
+                      <div
+                        onClick={() => handleImportModeChange('merge')}
+                        className={`p-3 rounded-xl border cursor-pointer transition flex items-start gap-2.5 ${
+                          importMode === 'merge'
+                            ? 'bg-blue-50/80 border-blue-500 ring-2 ring-blue-500/20 shadow-sm'
+                            : 'bg-white border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="importMode"
+                          checked={importMode === 'merge'}
+                          onChange={() => handleImportModeChange('merge')}
+                          className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">
+                            Merge & Skip Duplicates
+                          </p>
+                          <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">
+                            Keeps existing database records and only appends brand new unique rows from this sheet.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Deduplication & format confirmation */}
-                  <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs text-emerald-900 space-y-1">
-                    <p className="font-semibold flex items-center gap-1.5">
+                  {/* Summary of Data Hygiene */}
+                  <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs text-emerald-950 space-y-1">
+                    <p className="font-bold flex items-center gap-1.5 text-emerald-900">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                       Automatic Cleanup & De-duplication Active:
                     </p>
-                    <p className="text-[11px] text-emerald-800">
-                      &bull; Month column automatically formatted to Short Month (e.g. <code>Jan-26</code>, <code>Sep-25</code>).<br />
-                      &bull; Turn Around Time (TAT) converted to <code>Yes</code> / <code>No</code>.<br />
-                      &bull; Duplicate entries automatically removed to keep only unique tickets.
+                    <p className="text-[11px] text-emerald-800 leading-relaxed">
+                      &bull; Blank cells in Excel remain clean and empty (no dummy timestamps or zones injected).<br />
+                      &bull; <code>Action taken</code> and <code>Date close</code> synchronized and preserved.<br />
+                      &bull; Turn Around Time (TAT) normalized to <code>Yes</code> / <code>No</code>.<br />
+                      &bull; Duplicate rows filtered out cleanly.
                     </p>
                   </div>
 

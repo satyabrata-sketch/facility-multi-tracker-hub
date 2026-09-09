@@ -101,9 +101,9 @@ export default function MobileTicketList({
               <p className="text-xs font-medium text-slate-800 line-clamp-2 leading-relaxed">
                 {t['Discription '] || 'No description provided.'}
               </p>
-              {t['Action Taken '] && (
+              {(t['Action Taken '] || t['Action taken ']) && (
                 <p className="text-[11px] text-slate-500 mt-1 line-clamp-1 italic">
-                  ↳ Action: {t['Action Taken ']}
+                  ↳ Action: {t['Action Taken '] || t['Action taken ']}
                 </p>
               )}
             </div>

@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs/dist/exceljs.min.js';
 import * as XLSX from 'xlsx';
 import {
   COLUMNS_SCHEMA,
+  EXPORT_COLUMNS_SCHEMA,
   detectTicketYear,
   isInvalidPivotOrSummaryRow,
   sanitizeSiteValue,
@@ -11,9 +12,112 @@ import {
   deduplicateTickets,
   compareMonthsChronologically,
   normalizeTicketFields,
-} from './schema';
+  normalizeDate,
+} from './schema.js';
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function parseExcelSerialDate(raw) {
+  if (typeof raw !== 'number' || isNaN(raw) || raw <= 0) return null;
+  try {
+    if (XLSX?.SSF?.parse_date_code) {
+      const p = XLSX.SSF.parse_date_code(raw);
+      if (p && p.y) return p;
+    }
+  } catch (e) {}
+  const ms = Math.round((raw - 25569) * 86400 * 1000);
+  const d = new Date(ms);
+  if (isNaN(d.getTime())) return null;
+  return {
+    d: d.getUTCDate(),
+    m: d.getUTCMonth() + 1,
+    y: d.getUTCFullYear(),
+  };
+}
+
+/**
+ * Formats date for export matching DD-MM-YYYY (e.g. 05-01-2026) as requested
+ */
+export function formatExportDate(raw, fallbackYear = '2026') {
+  if (raw === undefined || raw === null || raw === '') return '';
+  if (typeof raw === 'number') {
+    const parsed = parseExcelSerialDate(raw);
+    if (parsed) {
+      const d = String(parsed.d).padStart(2, '0');
+      const m = String(parsed.m).padStart(2, '0');
+      const y = parsed.y;
+      return `${d}-${m}-${y}`;
+    }
+  }
+  const str = String(raw).trim();
+  if (!str) return '';
+
+  // Already DD-MM-YYYY
+  if (/^\d{2}-\d{2}-\d{4}$/.test(str)) return str;
+
+  // YYYY-MM-DD
+  const mIso = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (mIso) {
+    return `${mIso[3].padStart(2, '0')}-${mIso[2].padStart(2, '0')}-${mIso[1]}`;
+  }
+
+  // DD/MM/YYYY or DD.MM.YYYY
+  const mSlash = str.match(/^(\d{1,2})[-./](\d{1,2})[-./](\d{4})/);
+  if (mSlash) {
+    return `${mSlash[1].padStart(2, '0')}-${mSlash[2].padStart(2, '0')}-${mSlash[3]}`;
+  }
+
+  // M/D/YYYY
+  const mMDY = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (mMDY) {
+    let y = parseInt(mMDY[3], 10);
+    if (y < 100) y += 2000;
+    return `${mMDY[2].padStart(2, '0')}-${mMDY[1].padStart(2, '0')}-${y}`;
+  }
+
+  return str;
+}
+
+/**
+ * Formats Date close for export matching '05-Jan' or date string
+ */
+export function formatExportDateClose(raw, fallbackYear = '2026') {
+  if (raw === undefined || raw === null || raw === '') return '';
+  if (typeof raw === 'number') {
+    const parsed = parseExcelSerialDate(raw);
+    if (parsed) {
+      const d = String(parsed.d).padStart(2, '0');
+      const m = MONTH_NAMES[parsed.m - 1] || 'Jan';
+      return `${d}-${m}`;
+    }
+  }
+  const str = String(raw).trim();
+  if (!str) return '';
+
+  // DD-MMM (e.g. 05-Jan or 5-Jan)
+  if (/^\d{1,2}-[A-Za-z]{3}$/.test(str)) {
+    const parts = str.split('-');
+    return `${parts[0].padStart(2, '0')}-${parts[1]}`;
+  }
+
+  // YYYY-MM-DD -> DD-MMM (e.g. 2026-01-05 -> 05-Jan)
+  const mIso = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (mIso) {
+    const d = mIso[3].padStart(2, '0');
+    const m = MONTH_NAMES[parseInt(mIso[2], 10) - 1] || 'Jan';
+    return `${d}-${m}`;
+  }
+
+  // DD-MM-YYYY -> DD-MMM
+  const mDmy = str.match(/^(\d{1,2})[-./](\d{1,2})[-./](\d{4})/);
+  if (mDmy) {
+    const d = mDmy[1].padStart(2, '0');
+    const m = MONTH_NAMES[parseInt(mDmy[2], 10) - 1] || 'Jan';
+    return `${d}-${m}`;
+  }
+
+  return str;
+}
 
 /**
  * Converts any date or raw month to Short Month format (e.g. "Jan-26", "Sep-25")
@@ -21,7 +125,7 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 export function formatShortMonth(raw, fallbackYear = '26') {
   if (!raw) return '';
   if (typeof raw === 'number') {
-    const parsed = XLSX.SSF.parse_date_code(raw);
+    const parsed = parseExcelSerialDate(raw);
     if (parsed) {
       const m = MONTH_NAMES[parsed.m - 1] || 'Jan';
       const y = String(parsed.y).slice(-2);
@@ -55,7 +159,7 @@ export function formatShortMonth(raw, fallbackYear = '26') {
 export function formatExcelDate(raw, fallbackYear = '2026') {
   if (!raw) return '';
   if (typeof raw === 'number') {
-    const parsed = XLSX.SSF.parse_date_code(raw);
+    const parsed = parseExcelSerialDate(raw);
     if (parsed) {
       const y = parsed.y;
       const m = String(parsed.m).padStart(2, '0');
@@ -159,17 +263,18 @@ export function formatExcelTime(raw) {
 /**
  * Robustly extracts field value from ticket regardless of casing or space differences
  */
-export function getTicketFieldValue(ticket, key) {
+export function getTicketFieldValue(ticket, colKey) {
   if (!ticket) return '';
+  const key = typeof colKey === 'object' && colKey ? colKey.key : String(colKey || '');
   if (ticket[key] !== undefined && ticket[key] !== null && String(ticket[key]).trim() !== '') {
     return ticket[key];
   }
-  if (key === 'Action Taken ') {
+  if (key === 'Action Taken ' || key === 'Action taken ' || key.trim().toLowerCase() === 'action taken') {
     return (
-      ticket['Action Taken '] ||
       ticket['Action taken '] ||
-      ticket['Action Taken'] ||
+      ticket['Action Taken '] ||
       ticket['Action taken'] ||
+      ticket['Action Taken'] ||
       ticket['action_taken'] ||
       ticket['Action'] ||
       ticket['action'] ||
@@ -273,35 +378,34 @@ const COLUMN_WIDTHS = {
   'Location': 18,
   'Month ': 12,
   'Date ': 14,
-  'Report Time': 13,
+  'Report Time': 14,
   'Request category': 20,
   'Employee Name ': 22,
   'Request Via ': 15,
-  'Discription ': 38,
-  'Action Taken ': 38,
+  'Discription ': 40,
+  'Action taken ': 40,
   'Date close ': 14,
   'Resolved time': 14,
   'Status ': 15,
   'Request from ': 22,
   'Call type': 14,
   'Remark': 20,
-  'is On TAT': 12,
-  'Priority': 12,
 };
 
 /**
  * Build a styled worksheet inside an ExcelJS Workbook
+ * Outputs the exact 18-column operational tracker schema requested with filled data
  */
 function buildWorksheet(workbook, sheetTitle, ticketsList) {
   const ws = workbook.addWorksheet(sheetTitle, {
     views: [{ state: 'frozen', xSplit: 2, ySplit: 1, activePane: 'bottomRight' }]
   });
 
-  // Columns definition
-  ws.columns = COLUMNS_SCHEMA.map((col) => ({
+  // Columns definition: Strictly the 18 columns matching the tracker
+  ws.columns = EXPORT_COLUMNS_SCHEMA.map((col) => ({
     header: col.key,
     key: col.key,
-    width: COLUMN_WIDTHS[col.key] || 16,
+    width: col.width || COLUMN_WIDTHS[col.key] || 16,
   }));
 
   // Style Header Row
@@ -349,7 +453,7 @@ function buildWorksheet(workbook, sheetTitle, ticketsList) {
       rawSite = sanitizeSiteValue(rawSite);
     }
 
-    COLUMNS_SCHEMA.forEach((c) => {
+    EXPORT_COLUMNS_SCHEMA.forEach((c) => {
       let val = getTicketFieldValue(t, c.key);
 
       if (c.key === 'Sr no.') {
@@ -362,12 +466,16 @@ function buildWorksheet(workbook, sheetTitle, ticketsList) {
         val = rawCategory || val || 'Housekeeping';
       } else if (c.key === 'Month ') {
         val = formatShortMonth(val, sheetTitle.includes('2025') ? '25' : '26');
-      } else if (c.key === 'Date ' || c.key === 'Date close ') {
-        val = formatExcelDate(val, sheetTitle.includes('2025') ? '2025' : '2026');
+      } else if (c.key === 'Date ') {
+        val = formatExportDate(val, sheetTitle.includes('2025') ? '2025' : '2026');
+      } else if (c.key === 'Date close ') {
+        val = formatExportDateClose(val, sheetTitle.includes('2025') ? '2025' : '2026');
+      } else if (c.key === 'Action taken ') {
+        val = getTicketFieldValue(t, 'Action taken ') || getTicketFieldValue(t, 'Action Taken ') || '';
       } else if (c.key === 'Report Time' || c.key === 'Resolved time') {
         val = formatExcelTime(val);
-      } else if (c.key === 'is On TAT') {
-        val = formatTatValue(val);
+      } else if (c.key === 'Status ') {
+        val = val || 'Resolved';
       }
       rowValues[c.key] = val !== undefined && val !== null ? val : '';
     });
@@ -379,7 +487,7 @@ function buildWorksheet(workbook, sheetTitle, ticketsList) {
     const bgArgb = isEven ? 'FFFFFFFF' : 'FFF8FAFC';
 
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-      const colKey = COLUMNS_SCHEMA[colNumber - 1]?.key;
+      const colKey = EXPORT_COLUMNS_SCHEMA[colNumber - 1]?.key;
       let cellFont = { name: 'Segoe UI', size: 10, color: { argb: 'FF1E293B' } };
       let cellFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } };
 
@@ -398,12 +506,6 @@ function buildWorksheet(workbook, sheetTitle, ticketsList) {
           cellFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFBEB' } };
           cellFont = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFB45309' } };
         }
-      } else if (colKey === 'is On TAT') {
-        const tat = String(cell.value || '').trim();
-        if (tat === 'No') {
-          cellFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF2F2' } };
-          cellFont = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF991B1B' } };
-        }
       }
 
       cell.font = cellFont;
@@ -417,7 +519,7 @@ function buildWorksheet(workbook, sheetTitle, ticketsList) {
       cell.alignment = {
         vertical: 'middle',
         horizontal: colNumber <= 2 ? 'center' : 'left',
-        wrapText: colKey === 'Discription ' || colKey === 'Action Taken ',
+        wrapText: colKey === 'Discription ' || colKey === 'Action taken ' || colKey === 'Action Taken ',
       };
 
       // Native Excel in-cell dropdowns!
@@ -432,18 +534,6 @@ function buildWorksheet(workbook, sheetTitle, ticketsList) {
           type: 'list',
           allowBlank: true,
           formulae: ['"Resolved,Not Resolved,In-Progress,Open"'],
-        };
-      } else if (colKey === 'Priority') {
-        cell.dataValidation = {
-          type: 'list',
-          allowBlank: true,
-          formulae: ['"High,Medium,Low"'],
-        };
-      } else if (colKey === 'is On TAT') {
-        cell.dataValidation = {
-          type: 'list',
-          allowBlank: true,
-          formulae: ['"Yes,No"'],
         };
       } else if (colKey === 'Call type') {
         cell.dataValidation = {
@@ -463,12 +553,18 @@ function buildWorksheet(workbook, sheetTitle, ticketsList) {
           allowBlank: true,
           formulae: ['"In person,Phone,Mail,Feedback Form"'],
         };
+      } else if (colKey === 'Request from ') {
+        cell.dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: ['"Employee,Employee ,Management,Client,Visitor"'],
+        };
       }
     });
   });
 
-  // Enable AutoFilter dropdowns
-  const lastColLetter = String.fromCharCode(64 + COLUMNS_SCHEMA.length);
+  // Enable AutoFilter dropdowns across all 18 columns
+  const lastColLetter = String.fromCharCode(64 + EXPORT_COLUMNS_SCHEMA.length);
   ws.autoFilter = {
     from: 'A1',
     to: `${lastColLetter}${sortedTickets.length + 1}`,
@@ -1066,10 +1162,10 @@ export function parseSheetToTickets(workbook, selectedSheetName, existingTickets
 
   const tickets = [];
   const seenKeys = new Set();
-  const skipExisting = options?.skipExisting === true;
+  const skipExisting = options?.skipExisting !== false; // Default to true!
 
-  // Only populate seenKeys from existing database tickets if skipExisting is explicitly requested!
-  if (skipExisting && Array.isArray(existingTickets)) {
+  // Only populate seenKeys from existing database tickets if skipExisting is true and not doing a fresh replacement!
+  if (skipExisting && !options?.replaceAll && Array.isArray(existingTickets)) {
     existingTickets.forEach((t) => {
       const key = getTicketUniqueKey(t);
       if (key) seenKeys.add(key);
@@ -1087,17 +1183,28 @@ export function parseSheetToTickets(workbook, selectedSheetName, existingTickets
     COLUMNS_SCHEMA.forEach((col) => {
       let rawVal = getTicketFieldValue(row, col.key);
 
-      if (rawVal === undefined || rawVal === null || String(rawVal).trim() === '') {
-        const def = typeof col.defaultValue === 'function' ? col.defaultValue() : col.defaultValue;
-        rawVal = def !== undefined && def !== null ? def : '';
+      // CRITICAL: Blank cells in Excel stay blank string "" (do NOT inject fake current time or dummy zone!)
+      if (rawVal === undefined || rawVal === null) {
+        rawVal = '';
       }
 
       if (col.key === 'Month ') {
         ticket[col.key] = formatShortMonth(rawVal, sheetName.includes('2025') ? '25' : '26');
       } else if (col.key === 'is On TAT') {
         ticket[col.key] = formatTatValue(rawVal);
-      } else if (col.type === 'date') {
-        ticket[col.key] = formatExcelDate(rawVal, sheetName.includes('2025') ? '2025' : '2026');
+      } else if (col.key === 'Date ' || col.type === 'date') {
+        ticket[col.key] = normalizeDate(rawVal, sheetName.includes('2025') ? '2025' : '2026');
+      } else if (col.key === 'Date close ') {
+        const str = String(rawVal).trim();
+        if (/^\d{1,2}-[A-Za-z]{3}$/.test(str)) {
+          ticket[col.key] = str;
+        } else if (typeof rawVal === 'number' || /^\d{4,5}$/.test(str)) {
+          ticket[col.key] = formatExportDateClose(rawVal, sheetName.includes('2025') ? '2025' : '2026');
+        } else if (str) {
+          ticket[col.key] = normalizeDate(rawVal, sheetName.includes('2025') ? '2025' : '2026');
+        } else {
+          ticket[col.key] = '';
+        }
       } else if (col.type === 'time') {
         ticket[col.key] = formatExcelTime(rawVal);
       } else if (rawVal !== undefined && rawVal !== null) {
@@ -1130,6 +1237,11 @@ export function parseSheetToTickets(workbook, selectedSheetName, existingTickets
     // Must have either a valid description, category, or Sr no to be considered a real ticket
     if (!ticket['Discription '] && !ticket['Request category'] && !ticket['Employee Name ']) {
       return; // Skip empty/noise row
+    }
+
+    // Status: default to Open if completely missing
+    if (!ticket['Status ']) {
+      ticket['Status '] = ticket['Date close '] ? 'Resolved' : 'Open';
     }
 
     // Detect Year

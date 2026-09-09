@@ -174,10 +174,16 @@ export default function TicketGrid({
       const fieldKey = colDef.field;
       const updates = { [fieldKey]: newValue };
 
-      if (fieldKey === 'Action Taken ') {
+      if (
+        fieldKey === 'Action Taken ' ||
+        fieldKey === 'Action taken ' ||
+        fieldKey.trim().toLowerCase() === 'action taken'
+      ) {
         updates['Action taken '] = newValue;
+        updates['Action Taken '] = newValue;
       }
-      if (fieldKey === 'Discription ') {
+      if (fieldKey === 'Discription ' || fieldKey === 'Description') {
+        updates['Discription '] = newValue;
         updates['Description'] = newValue;
       }
       if (fieldKey === 'Date close ') {
@@ -266,10 +272,23 @@ export default function TicketGrid({
         };
       }
 
-      if (col.key === 'Action Taken ') {
+      if (
+        col.key === 'Action Taken ' ||
+        col.key === 'Action taken ' ||
+        col.key.trim().toLowerCase() === 'action taken'
+      ) {
         baseCol.valueGetter = (params) => {
           if (!params.data) return '';
-          return params.data['Action Taken '] || params.data['Action taken '] || params.data['Action Taken'] || params.data['Action taken'] || '';
+          return (
+            params.data['Action taken '] ||
+            params.data['Action Taken '] ||
+            params.data['Action taken'] ||
+            params.data['Action Taken'] ||
+            params.data.action_taken ||
+            params.data.Action ||
+            params.data.action ||
+            ''
+          );
         };
         baseCol.valueSetter = (params) => {
           if (!params.data) return false;

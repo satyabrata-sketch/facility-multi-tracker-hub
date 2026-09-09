@@ -1,27 +1,143 @@
-// Exact 20 Column definitions from HELP DESK TRACKER FY 25-26 (11) 1.xlsx
+// Exact Column definitions from HELP DESK TRACKER
 // Database schema matches the exact Excel column names.
+
+export const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Helper to get current short month: e.g. "Jan-26"
 export function getCurrentShortMonth() {
   const now = new Date();
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const monthName = months[now.getMonth()];
+  const monthName = MONTH_NAMES[now.getMonth()];
   const yr = String(now.getFullYear()).slice(-2);
   return `${monthName}-${yr}`;
 }
 
 /**
-  * Standardized ticket year detector: returns '2025' or '2026'
-  */
+ * Standardized ticket year detector: returns '2025' or '2026'
+ */
 export function detectTicketYear(ticket) {
   if (!ticket) return '2026';
   if (ticket.year === '2025' || ticket.year === '2026') return ticket.year;
-  const d = String(ticket['Date '] || '').trim();
-  const m = String(ticket['Month '] || '').trim().toLowerCase();
-  if (d.startsWith('2025') || d.startsWith('2024') || m.includes('25') || m.includes('24') || m.endsWith('-25')) {
+  const d = String(ticket['Date '] || ticket['Date'] || '').trim();
+  const m = String(ticket['Month '] || ticket['Month'] || '').trim().toLowerCase();
+  if (
+    d.startsWith('2025') ||
+    d.startsWith('2024') ||
+    d.endsWith('-2025') ||
+    d.endsWith('/2025') ||
+    d.endsWith('-25') ||
+    d.endsWith('/25') ||
+    m.includes('25') ||
+    m.includes('24') ||
+    m.endsWith('-25')
+  ) {
     return '2025';
   }
   return '2026';
+}
+
+/**
+ * Converts any date or raw month to Short Month format (e.g. "Jan-26", "Sep-25")
+ */
+export function formatShortMonth(raw, fallbackYear = '26') {
+  if (!raw) return '';
+  if (typeof raw === 'number') {
+    const totalDays = Math.floor(raw);
+    if (totalDays > 30000 && totalDays < 70000) {
+      const utcDays = totalDays - 25569;
+      const dObj = new Date(utcDays * 86400 * 1000);
+      const m = MONTH_NAMES[dObj.getUTCMonth()] || 'Jan';
+      const y = String(dObj.getUTCFullYear()).slice(-2);
+      return `${m}-${y}`;
+    }
+  }
+  if (raw instanceof Date) {
+    const m = MONTH_NAMES[raw.getMonth()] || 'Jan';
+    const y = String(raw.getFullYear()).slice(-2);
+    return `${m}-${y}`;
+  }
+  const str = String(raw).trim();
+  const match = str.match(/^(\d{4})-(\d{2})/);
+  if (match) {
+    const monthNum = parseInt(match[2], 10);
+    const m = MONTH_NAMES[monthNum - 1] || 'Jan';
+    const y = match[1].slice(-2);
+    return `${m}-${y}`;
+  }
+  if (/^[A-Za-z]{3}-\d{2}$/.test(str)) {
+    return str;
+  }
+  const dMatch = str.match(/^[A-Za-z]{3}/);
+  if (dMatch) {
+    return `${dMatch[0]}-${fallbackYear}`;
+  }
+  return str;
+}
+
+/**
+ * Robust date normalizer: converts Excel serial codes, DD-MM-YYYY, DD/MM/YYYY, YYYY-MM-DD, D-MMM to YYYY-MM-DD
+ */
+export function normalizeDate(raw, fallbackYear = '2026') {
+  if (raw === undefined || raw === null || raw === '') return '';
+  if (typeof raw === 'number') {
+    const totalDays = Math.floor(raw);
+    if (totalDays > 30000 && totalDays < 70000) {
+      const utcDays = totalDays - 25569;
+      const date = new Date(utcDays * 86400 * 1000);
+      const y = date.getUTCFullYear();
+      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(date.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  }
+  const str = String(raw).trim();
+  if (!str) return '';
+
+  // Excel serial number as string
+  if (/^\d{4,5}$/.test(str)) {
+    const totalDays = parseInt(str, 10);
+    if (totalDays > 30000 && totalDays < 70000) {
+      const utcDays = totalDays - 25569;
+      const date = new Date(utcDays * 86400 * 1000);
+      const y = date.getUTCFullYear();
+      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(date.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  // Already YYYY-MM-DD
+  const mIso = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (mIso) {
+    return `${mIso[1]}-${mIso[2].padStart(2, '0')}-${mIso[3].padStart(2, '0')}`;
+  }
+
+  // DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
+  const mDmy = str.match(/^(\d{1,2})[-./](\d{1,2})[-./](\d{4})/);
+  if (mDmy) {
+    return `${mDmy[3]}-${mDmy[2].padStart(2, '0')}-${mDmy[1].padStart(2, '0')}`;
+  }
+
+  // M/D/YY or M/D/YYYY
+  const mSlash = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (mSlash) {
+    let y = parseInt(mSlash[3], 10);
+    if (y < 100) y += 2000;
+    return `${y}-${String(mSlash[1]).padStart(2, '0')}-${String(mSlash[2]).padStart(2, '0')}`;
+  }
+
+  // D-MMM or D-MMM-YY (e.g. 05-Jan, 5-Jan-26)
+  const mDMMM = str.match(/^(\d{1,2})-([A-Za-z]{3})(?:-(\d{2,4}))?$/);
+  if (mDMMM) {
+    const d = String(mDMMM[1]).padStart(2, '0');
+    const mIdx = MONTH_NAMES.findIndex((n) => n.toLowerCase() === mDMMM[2].toLowerCase());
+    if (mIdx !== -1) {
+      let y = mDMMM[3] ? parseInt(mDMMM[3], 10) : parseInt(fallbackYear, 10);
+      if (y < 100) y += 2000;
+      return `${y}-${String(mIdx + 1).padStart(2, '0')}-${d}`;
+    }
+  }
+
+  return str;
 }
 
 /**
@@ -84,11 +200,11 @@ export function isInvalidPivotOrSummaryRow(ticket) {
 
   const site = String(ticket['Site '] || ticket['Site'] || '').trim();
   const siteLower = site.toLowerCase();
-  const sr = String(ticket['Sr no.'] || '').trim().toLowerCase();
+  const sr = String(ticket['Sr no.'] || ticket['Sr no'] || '').trim().toLowerCase();
   const cat = String(ticket['Request category'] || '').trim().toLowerCase();
   const desc = String(ticket['Discription '] || ticket['Description'] || '').trim();
   const emp = String(ticket['Employee Name '] || ticket['Employee Name'] || '').trim();
-  const action = String(ticket['Action Taken '] || ticket['Action taken '] || '').trim();
+  const action = String(ticket['Action taken '] || ticket['Action Taken '] || '').trim();
 
   // Excel pivot / summary noise row labels
   if (
@@ -159,19 +275,24 @@ export function sanitizeSiteValue(siteRaw) {
 export function getTicketUniqueKey(ticket) {
   if (!ticket || typeof ticket !== 'object') return '';
   const yr = detectTicketYear(ticket);
-  const sr = String(ticket['Sr no.'] || '').trim();
-  const site = String(ticket['Site '] || ticket['Site'] || '').trim().toUpperCase();
-  const date = String(ticket['Date '] || ticket['Month '] || '').trim();
-  const time = String(ticket['Report Time'] || '').trim();
+  const site = sanitizeSiteValue(ticket['Site '] || ticket['Site'] || 'DT3').toUpperCase().replace(/\s+/g, ' ');
+  const date = normalizeDate(ticket['Date '] || ticket['Month '], yr);
   const cat = String(ticket['Request category'] || '').trim().toLowerCase();
-  const emp = String(ticket['Employee Name '] || '').trim().toLowerCase();
-  const desc = String(ticket['Discription '] || ticket['Description'] || '')
-    .trim()
+  const emp = String(ticket['Employee Name '] || ticket['Employee Name'] || '')
     .toLowerCase()
-    .replace(/\s+/g, ' ');
+    .replace(/[^a-z0-9]/g, '')
+    .slice(0, 15);
+  const desc = String(ticket['Discription '] || ticket['Description'] || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+    .slice(0, 45);
 
-  // Deterministic signature based on real ticket business data:
-  return `${yr}_sr_${sr}_${date}_${time}_${site}_${cat}_${emp.slice(0, 20)}_${desc.slice(0, 40)}`;
+  if (desc && date) {
+    return `${yr}_${site}_${date}_${cat}_${emp}_${desc}`;
+  }
+
+  const sr = String(ticket['Sr no.'] || '').trim();
+  return `${yr}_${site}_sr_${sr}_${date}_${desc.slice(0, 30)}`;
 }
 
 /**
@@ -181,19 +302,21 @@ export function normalizeTicketFields(ticket) {
   if (!ticket || typeof ticket !== 'object') return ticket;
   const t = { ...ticket };
 
-  // Action Taken normalization (synchronize both 'Action Taken ' and 'Action taken ')
+  // Action Taken normalization (synchronize both 'Action taken ' and 'Action Taken ')
   const actionVal = String(
-    t['Action Taken '] ||
     t['Action taken '] ||
-    t['Action Taken'] ||
+    t['Action Taken '] ||
     t['Action taken'] ||
+    t['Action Taken'] ||
     t.action_taken ||
     t.Action ||
     t.action ||
     ''
   ).trim();
-  t['Action Taken '] = actionVal;
   t['Action taken '] = actionVal;
+  t['Action Taken '] = actionVal;
+  t['Action taken'] = actionVal;
+  t['Action Taken'] = actionVal;
 
   // Description normalization (synchronize 'Discription ' and 'Description')
   const descVal = String(
@@ -274,49 +397,98 @@ export function normalizeTicketFields(ticket) {
   // Year normalization
   t.year = String(t.year || detectTicketYear(t));
 
+  // Month normalization to short month (e.g. Jan-26)
+  if (t['Month ']) {
+    t['Month '] = formatShortMonth(t['Month '], t.year === '2025' ? '25' : '26');
+  }
+
+  // Date normalization: if date string exists, normalize if needed
+  if (t['Date ']) {
+    t['Date '] = normalizeDate(t['Date '], t.year);
+  }
+
   return t;
 }
 
 /**
- * Deduplicates an array of tickets, merging updates and keeping only strictly unique records
+ * Deduplicates an array of tickets, merging updates and keeping only strictly unique records.
+ * Uses both normalized content signature and Sr no + Site signature.
  */
 export function deduplicateTickets(ticketList) {
   if (!Array.isArray(ticketList) || ticketList.length === 0) return [];
 
-  const map = new Map();
+  const keyMap = new Map();
+  const srSiteMap = new Map();
 
   ticketList.forEach((rawT, idx) => {
     if (!rawT || isInvalidPivotOrSummaryRow(rawT)) return;
     const t = normalizeTicketFields(rawT);
-    const key = getTicketUniqueKey(t);
-    if (!key) return;
+    const primaryKey = getTicketUniqueKey(t);
+    if (!primaryKey) return;
 
-    if (!map.has(key)) {
-      const yr = detectTicketYear(t);
+    const yr = detectTicketYear(t);
+    const site = sanitizeSiteValue(t['Site '] || t['Site'] || 'DT3');
+    const srNum = parseInt(t['Sr no.'], 10);
+    const srSiteKey = (!isNaN(srNum) && srNum > 0) ? `${yr}_${site}_${srNum}` : null;
+
+    let matchedExisting = null;
+    let matchKey = primaryKey;
+
+    if (keyMap.has(primaryKey)) {
+      matchedExisting = keyMap.get(primaryKey);
+      matchKey = primaryKey;
+    } else if (srSiteKey && srSiteMap.has(srSiteKey)) {
+      const candidate = srSiteMap.get(srSiteKey);
+      const descA = String(candidate['Discription '] || candidate['Description'] || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const descB = String(t['Discription '] || t['Description'] || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const dateA = normalizeDate(candidate['Date '] || candidate['Month '], yr);
+      const dateB = normalizeDate(t['Date '] || t['Month '], yr);
+
+      if (dateA === dateB || (descA && descB && (descA.includes(descB.slice(0, 20)) || descB.includes(descA.slice(0, 20))))) {
+        matchedExisting = candidate;
+        matchKey = getTicketUniqueKey(candidate);
+      }
+    }
+
+    if (!matchedExisting) {
       const stableId = t.id || `sr-${yr}-${idx + 1}`;
-      map.set(key, { ...t, id: stableId, year: yr });
+      const record = { ...t, id: stableId, year: yr };
+      keyMap.set(primaryKey, record);
+      if (srSiteKey) srSiteMap.set(srSiteKey, record);
     } else {
       // Duplicate found! Keep the most complete / updated record
-      const existing = map.get(key);
       const isExistingClosed =
-        existing['Status '] === 'Closed' || existing['Status '] === 'Resolved';
+        matchedExisting['Status '] === 'Closed' || matchedExisting['Status '] === 'Resolved';
       const isNewClosed = t['Status '] === 'Closed' || t['Status '] === 'Resolved';
 
-      const existingScore =
-        (isExistingClosed ? 3 : 0) + (existing['Action Taken '] || existing['Action taken '] ? 1 : 0);
-      const newScore =
-        (isNewClosed ? 3 : 0) + (t['Action Taken '] || t['Action taken '] ? 1 : 0);
+      const existingAction = matchedExisting['Action taken '] || matchedExisting['Action Taken '] || '';
+      const newAction = t['Action taken '] || t['Action Taken '] || '';
+
+      const existingScore = (isExistingClosed ? 3 : 0) + (existingAction ? 2 : 0) + (matchedExisting['Date close '] ? 1 : 0);
+      const newScore = (isNewClosed ? 3 : 0) + (newAction ? 2 : 0) + (t['Date close '] ? 1 : 0);
 
       const merged =
         newScore >= existingScore
-          ? { ...existing, ...t, id: existing.id }
-          : { ...t, ...existing, id: existing.id };
+          ? { ...matchedExisting, ...t, id: matchedExisting.id, year: yr }
+          : { ...t, ...matchedExisting, id: matchedExisting.id, year: yr };
 
-      map.set(key, normalizeTicketFields(merged));
+      // Ensure action taken and description are never lost
+      if (!merged['Action taken '] && existingAction) {
+        merged['Action taken '] = existingAction;
+        merged['Action Taken '] = existingAction;
+      }
+      if (!merged['Action taken '] && newAction) {
+        merged['Action taken '] = newAction;
+        merged['Action Taken '] = newAction;
+      }
+
+      const normMerged = normalizeTicketFields(merged);
+      keyMap.set(matchKey, normMerged);
+      if (srSiteKey) srSiteMap.set(srSiteKey, normMerged);
     }
   });
 
-  return Array.from(map.values());
+  return Array.from(keyMap.values());
 }
 
 /**
@@ -327,12 +499,13 @@ export function identifyDuplicateTicketIds(ticketList) {
   const map = new Map();
   const duplicateIds = [];
 
-  ticketList.forEach((t) => {
-    if (!t) return;
-    if (isInvalidPivotOrSummaryRow(t)) {
-      if (t.id) duplicateIds.push(String(t.id));
+  ticketList.forEach((rawT) => {
+    if (!rawT) return;
+    if (isInvalidPivotOrSummaryRow(rawT)) {
+      if (rawT.id) duplicateIds.push(String(rawT.id));
       return;
     }
+    const t = normalizeTicketFields(rawT);
     const key = getTicketUniqueKey(t);
     if (!key) {
       if (t.id) duplicateIds.push(String(t.id));
@@ -343,7 +516,6 @@ export function identifyDuplicateTicketIds(ticketList) {
       map.set(key, t);
     } else {
       const existing = map.get(key);
-      // Whichever duplicate record is not retained is queued for purge
       if (t.id && existing.id && String(t.id) !== String(existing.id)) {
         duplicateIds.push(String(t.id));
       }
@@ -352,6 +524,31 @@ export function identifyDuplicateTicketIds(ticketList) {
 
   return duplicateIds;
 }
+
+/**
+ * EXACT 18-column schema requested for Excel export matching the operational tracker:
+ * Sr no. | Site | Zone | Location | Month | Date | Report Time | Request category | Employee Name | Request Via | Discription | Action taken | Date close | Resolved time | Status | Request from | Call type | Remark
+ */
+export const EXPORT_COLUMNS_SCHEMA = [
+  { key: 'Sr no.', label: 'Sr no.', width: 10 },
+  { key: 'Site ', label: 'Site ', width: 12 },
+  { key: 'Zone', label: 'Zone', width: 12 },
+  { key: 'Location', label: 'Location', width: 18 },
+  { key: 'Month ', label: 'Month ', width: 12 },
+  { key: 'Date ', label: 'Date ', width: 14 },
+  { key: 'Report Time', label: 'Report Time', width: 14 },
+  { key: 'Request category', label: 'Request category', width: 20 },
+  { key: 'Employee Name ', label: 'Employee Name ', width: 22 },
+  { key: 'Request Via ', label: 'Request Via ', width: 15 },
+  { key: 'Discription ', label: 'Discription ', width: 40 },
+  { key: 'Action taken ', label: 'Action taken ', width: 40 },
+  { key: 'Date close ', label: 'Date close ', width: 14 },
+  { key: 'Resolved time', label: 'Resolved time', width: 14 },
+  { key: 'Status ', label: 'Status ', width: 15 },
+  { key: 'Request from ', label: 'Request from ', width: 22 },
+  { key: 'Call type', label: 'Call type', width: 14 },
+  { key: 'Remark', label: 'Remark', width: 20 },
+];
 
 export const COLUMNS_SCHEMA = [
   {
@@ -506,8 +703,8 @@ export const COLUMNS_SCHEMA = [
     defaultValue: '',
   },
   {
-    key: 'Action Taken ',
-    label: 'Action Taken ',
+    key: 'Action taken ',
+    label: 'Action taken ',
     type: 'textarea',
     editable: true,
     width: 280,
