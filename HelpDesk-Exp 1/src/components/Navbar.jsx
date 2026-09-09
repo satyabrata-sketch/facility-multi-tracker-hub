@@ -197,17 +197,18 @@ export default function Navbar({
             {isAdmin && (
               <button
                 onClick={() => (onTabChange ? onTabChange('users') : onOpenUsers())}
-                className={`inline-flex items-center px-2.5 py-1.5 rounded-lg border transition text-xs font-semibold shadow-sm ${
+                className={`p-2 rounded-lg border transition shadow-sm flex items-center justify-center ${
                   activeTab === 'users'
-                    ? 'bg-purple-600 border-purple-500 text-white shadow-purple-900/30'
-                    : 'bg-purple-950/40 border-purple-700/50 text-purple-200 hover:bg-purple-900/60 hover:text-white'
+                    ? 'bg-purple-600 border-purple-500 text-white shadow-purple-900/30 ring-2 ring-purple-400/40'
+                    : 'bg-slate-800 border-slate-700 text-purple-300 hover:text-white hover:bg-purple-950/60 hover:border-purple-600/60'
                 }`}
-                title="Admin Console: Create & Manage Users (satyabrata.mohanty1@cbre.com)"
+                title="Admin Console: Create & Manage Users"
+                aria-label="Admin Console"
               >
-                <Shield className="w-3.5 h-3.5 mr-1.5 text-purple-400" />
-                <span>Admin</span>
+                <ShieldCheck className="w-4 h-4 text-purple-400" />
               </button>
             )}
+
 
             {/* Settings */}
             <button
