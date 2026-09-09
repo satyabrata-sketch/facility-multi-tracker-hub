@@ -39,12 +39,13 @@ function getInitialLocalTickets() {
       if (Array.isArray(parsed) && parsed.length > 0) {
         const validTickets = parsed.filter((t) => !isInvalidPivotOrSummaryRow(t));
 
-        // Auto-heal: If cached localStorage data lacks Action Taken in 2025 OR 2026, purge cache & reload pristine dataset
+        // Auto-heal: If cached localStorage data lacks Action Taken or has fewer than 8,250 tickets in 2026, purge cache & reload pristine dataset
+        const count2026 = validTickets.filter((t) => t.year === '2026' || (!t.year && t['Date '] && !String(t['Date ']).startsWith('2025'))).length;
         const sample2025 = validTickets.find((t) => t.year === '2025' || (t['Date '] && String(t['Date ']).startsWith('2025')));
         const sample2026 = validTickets.find((t) => (t.year === '2026' || !t.year) && t['Sr no.'] && parseInt(t['Sr no.'], 10) <= 50);
         const lacks2025 = sample2025 && !(sample2025['Action Taken '] || sample2025['Action taken ']);
         const lacks2026 = sample2026 && !(sample2026['Action Taken '] || sample2026['Action taken ']);
-        if (lacks2025 || lacks2026) {
+        if (lacks2025 || lacks2026 || count2026 < 8250 || validTickets.length < 11700) {
           try {
             localStorage.removeItem(LOCAL_STORAGE_KEY);
           } catch (e) {}
@@ -81,7 +82,7 @@ function getInitialLocalTickets() {
 }
 
 // IndexedDB High-Performance Cache for 10k+ Tickets
-const IDB_NAME = 'CBRE_Helpdesk_DB_v2';
+const IDB_NAME = 'CBRE_Helpdesk_DB_v4';
 const IDB_STORE = 'tickets_store';
 
 function openTicketsIDB() {
@@ -111,7 +112,7 @@ export async function getCachedTicketsIDB() {
       const req = tx.objectStore(IDB_STORE).get('cached_tickets');
       req.onsuccess = () => {
         const res = req.result;
-        if (Array.isArray(res) && res.length > 0) {
+        if (Array.isArray(res) && res.length >= 11700) {
           const sample2025 = res.find((t) => t.year === '2025' || (t['Date '] && String(t['Date ']).startsWith('2025')));
           const sample2026 = res.find((t) => (t.year === '2026' || !t.year) && t['Sr no.'] && parseInt(t['Sr no.'], 10) <= 50);
           const lacks2025 = sample2025 && !(sample2025['Action Taken '] || sample2025['Action taken ']);
@@ -132,7 +133,6 @@ export async function getCachedTicketsIDB() {
     }
   });
 }
-
 
 export async function setCachedTicketsIDB(tickets) {
   const idb = await openTicketsIDB();
@@ -258,17 +258,20 @@ export function subscribeTickets(onSuccess, onError) {
   localListeners.push(onSuccess);
 
   // 1. Immediately emit in-memory or sample tickets so UI NEVER displays 0 while loading!
-  if (localTickets && localTickets.length > 0) {
+  if (localTickets && localTickets.length >= 11700) {
     onSuccess([...localTickets]);
   } else {
-    onSuccess([...sampleTickets]);
+    localTickets = deduplicateTickets(sampleTickets.map(normalizeTicketFields));
+    onSuccess([...localTickets]);
   }
 
   // 2. Check IndexedDB cache asynchronously
   getCachedTicketsIDB().then((cached) => {
-    if (Array.isArray(cached) && cached.length > 0) {
+    if (Array.isArray(cached) && cached.length >= 11700) {
       localTickets = deduplicateTickets(cached);
       onSuccess([...localTickets]);
+    } else {
+      setCachedTicketsIDB(localTickets);
     }
   });
 

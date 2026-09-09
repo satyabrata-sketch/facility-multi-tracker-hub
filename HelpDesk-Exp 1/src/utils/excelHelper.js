@@ -1175,13 +1175,6 @@ export function parseSheetToTickets(workbook, selectedSheetName, existingTickets
       const t = normalizeTicketFields(rawT);
       const key = getTicketUniqueKey(t);
       if (key) seenKeys.add(key);
-      const yr = detectTicketYear(t);
-      const srNum = parseInt(t['Sr no.'], 10);
-      const site = sanitizeSiteValue(t['Site '] || t['Site']);
-      if (!isNaN(srNum) && srNum > 0) {
-        seenKeys.add(`${yr}_sr_${srNum}`);
-        seenKeys.add(`${yr}_${site}_${srNum}`);
-      }
     });
   }
 
@@ -1291,26 +1284,16 @@ export function parseSheetToTickets(workbook, selectedSheetName, existingTickets
     }
     ticket.id = ticket.id || `import-${ticket.year || '2026'}-${Date.now().toString(36)}-${index + 1}`;
 
-    // Deduplication check: deterministic unique signature & Sr no signature
+    // Deduplication check: deterministic unique signature
     const dedupKey = getTicketUniqueKey(ticket);
-    const yr = ticket.year || (sheetName.includes('2025') ? '2025' : '2026');
-    const srNum = parseInt(ticket['Sr no.'], 10);
-    const site = ticket['Site '] || 'DT3';
-    const srKey = !isNaN(srNum) && srNum > 0 ? `${yr}_sr_${srNum}` : null;
-    const srSiteKey = !isNaN(srNum) && srNum > 0 ? `${yr}_${site}_${srNum}` : null;
 
-    const isDuplicate =
-      (dedupKey && seenKeys.has(dedupKey)) ||
-      (srKey && seenKeys.has(srKey)) ||
-      (srSiteKey && seenKeys.has(srSiteKey));
+    const isDuplicate = dedupKey && seenKeys.has(dedupKey);
 
     if (isDuplicate) {
       duplicatesFiltered++;
       return; // Skip duplicate!
     }
     if (dedupKey) seenKeys.add(dedupKey);
-    if (srKey) seenKeys.add(srKey);
-    if (srSiteKey) seenKeys.add(srSiteKey);
 
     tickets.push(ticket);
 

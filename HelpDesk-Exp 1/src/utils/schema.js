@@ -272,29 +272,28 @@ export function sanitizeSiteValue(siteRaw) {
 }
 
 /**
- * Generates a stable, deterministic unique signature for a ticket
+ * Generates a stable, deterministic unique signature for a ticket.
+ * Combines year, site, sr, date, time, category, employee, and description so distinct operational logs
+ * (such as multiple tasks on the same floor or repeated Sr nos by different teams) never collide.
  */
 export function getTicketUniqueKey(ticket) {
   if (!ticket || typeof ticket !== 'object') return '';
   const yr = detectTicketYear(ticket);
   const site = sanitizeSiteValue(ticket['Site '] || ticket['Site'] || 'DT3').toUpperCase().replace(/\s+/g, ' ');
+  const sr = String(ticket['Sr no.'] || ticket.sr_no || '').trim();
   const date = normalizeDate(ticket['Date '] || ticket['Month '], yr);
+  const time = String(ticket['Report Time'] || ticket['Report time'] || ticket['Report Time '] || '').trim();
   const cat = String(ticket['Request category'] || '').trim().toLowerCase();
   const emp = String(ticket['Employee Name '] || ticket['Employee Name'] || '')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '')
-    .slice(0, 15);
+    .slice(0, 20);
   const desc = String(ticket['Discription '] || ticket['Description'] || '')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '')
-    .slice(0, 45);
+    .slice(0, 60);
 
-  if (desc && date) {
-    return `${yr}_${site}_${date}_${cat}_${emp}_${desc}`;
-  }
-
-  const sr = String(ticket['Sr no.'] || '').trim();
-  return `${yr}_${site}_sr_${sr}_${date}_${desc.slice(0, 30)}`;
+  return `${yr}_${site}_${sr}_${date}_${time}_${cat}_${emp}_${desc}`;
 }
 
 // Pre-indexed lookup maps for instant, guaranteed Action Taken restoration
@@ -564,8 +563,11 @@ export function deduplicateTickets(ticketList) {
       const descB = String(t['Discription '] || t['Description'] || '').toLowerCase().replace(/[^a-z0-9]/g, '');
       const dateA = normalizeDate(candidate['Date '] || candidate['Month '], yr);
       const dateB = normalizeDate(t['Date '] || t['Month '], yr);
+      const empA = String(candidate['Employee Name '] || candidate['Employee Name'] || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const empB = String(t['Employee Name '] || t['Employee Name'] || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-      if (dateA === dateB || (descA && descB && (descA.includes(descB.slice(0, 20)) || descB.includes(descA.slice(0, 20))))) {
+      // Only consider duplicates if date, employee, and description actually match!
+      if (dateA === dateB && (empA === empB || !empA || !empB) && descA && descB && (descA === descB || descA.slice(0, 40) === descB.slice(0, 40))) {
         matchedExisting = candidate;
         matchKey = getTicketUniqueKey(candidate);
       }
