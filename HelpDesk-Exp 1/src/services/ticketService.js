@@ -707,7 +707,16 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
     });
 
   if (replaceAll) {
-    // 1. Wipe existing Firestore tickets
+    // 1a. Wipe existing Supabase tickets if connected
+    if (isSupabaseConfigValid && supabase) {
+      try {
+        await supabase.from('tickets').delete().neq('id', '___non_existent___');
+      } catch (e) {
+        console.warn('Supabase purge error during replaceAll:', e);
+      }
+    }
+
+    // 1b. Wipe existing Firestore tickets if configured
     if (isConfigValid && db) {
       try {
         const snap = await getDocs(collection(db, COLLECTION_NAME));
@@ -728,7 +737,27 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
     setCachedTicketsIDB(localTickets);
     notifyLocalListeners();
 
-    // 2. Upload all fresh tickets to Firestore in batches of 400
+    // 2a. Upload all fresh tickets to Supabase in batches of 200
+    if (isSupabaseConfigValid && supabase) {
+      const chunkSize = 200;
+      let processed = 0;
+      for (let i = 0; i < formattedIncoming.length; i += chunkSize) {
+        const chunk = formattedIncoming.slice(i, i + chunkSize);
+        const cleanChunk = chunk.map(sanitizeTicketForSupabase);
+        try {
+          const { error } = await supabase.from('tickets').upsert(cleanChunk, { onConflict: 'id' });
+          if (error) {
+            console.warn('Supabase batch upsert error:', error.message);
+          }
+        } catch (e) {
+          console.warn('Supabase batch import notice:', e);
+        }
+        processed += chunk.length;
+        if (onProgress) onProgress(processed, formattedIncoming.length);
+      }
+    }
+
+    // 2b. Upload all fresh tickets to Firestore in batches of 400
     if (isConfigValid && db) {
       const chunkSize = 400;
       let processed = 0;
@@ -749,7 +778,9 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
         });
         await batch.commit();
         processed += chunk.length;
-        if (onProgress) onProgress(processed, formattedIncoming.length);
+        if (onProgress && (!isSupabaseConfigValid || !supabase)) {
+          onProgress(processed, formattedIncoming.length);
+        }
       }
     }
 
@@ -773,6 +804,27 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
   setCachedTicketsIDB(localTickets);
   notifyLocalListeners();
 
+  // Save merged to Supabase
+  if (isSupabaseConfigValid && supabase) {
+    const chunkSize = 200;
+    let processed = 0;
+    for (let i = 0; i < toSave.length; i += chunkSize) {
+      const chunk = toSave.slice(i, i + chunkSize);
+      const cleanChunk = chunk.map(sanitizeTicketForSupabase);
+      try {
+        const { error } = await supabase.from('tickets').upsert(cleanChunk, { onConflict: 'id' });
+        if (error) {
+          console.warn('Supabase merge upsert error:', error.message);
+        }
+      } catch (e) {
+        console.warn('Supabase merge notice:', e);
+      }
+      processed += chunk.length;
+      if (onProgress) onProgress(processed, toSave.length);
+    }
+  }
+
+  // Save merged to Firestore
   if (isConfigValid && db) {
     const chunkSize = 400;
     let processed = 0;
@@ -793,7 +845,9 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
       });
       await batch.commit();
       processed += chunk.length;
-      if (onProgress) onProgress(processed, toSave.length);
+      if (onProgress && (!isSupabaseConfigValid || !supabase)) {
+        onProgress(processed, toSave.length);
+      }
     }
   }
 

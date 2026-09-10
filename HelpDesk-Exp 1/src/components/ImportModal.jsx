@@ -17,6 +17,7 @@ import { getExcelSheets, parseSheetToTickets } from '../utils/excelHelper';
 import { batchImportTickets, clearAllTickets, purgeAllDuplicates } from '../services/ticketService';
 import { sampleTickets } from '../data/sampleTickets';
 import { COLUMNS_SCHEMA, deduplicateTickets } from '../utils/schema';
+import { isSupabaseConfigValid } from '../supabase/supabaseConfig';
 
 export default function ImportModal({
   isOpen,
@@ -501,7 +502,7 @@ export default function ImportModal({
                       <div className="flex items-center justify-between text-xs text-slate-600">
                         <span className="flex items-center gap-1.5">
                           <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
-                          Batch migrating into Firestore...
+                          {isSupabaseConfigValid ? 'Batch migrating into Supabase...' : 'Batch migrating into Firestore...'}
                         </span>
                         <span className="font-mono font-medium">
                           {progress.processed} / {progress.total} (
