@@ -854,17 +854,6 @@ export default function AnalyticsDashboard({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
-            {/* Quick Action: Purge Duplicates & Optimize */}
-            <button
-              type="button"
-              onClick={handlePurgeDuplicatesClick}
-              className="px-3.5 py-2.5 rounded-xl bg-[#003F2D]/90 hover:bg-emerald-700 text-emerald-200 hover:text-white border border-emerald-500/40 text-xs font-bold shadow-md transition-all duration-200 flex items-center gap-1.5 active:scale-95 cursor-pointer hover:shadow-emerald-900/40"
-              title="Remove duplicate tickets and synchronize counts"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-spin" style={{ animationDuration: '6s' }} />
-              <span>Deduplicate Data</span>
-            </button>
-
             {/* TWO SECTION TOGGLE: 2026 (CURRENT) vs 2025 (HISTORICAL) */}
             <div className="inline-flex p-1.5 bg-[#091f17]/90 rounded-2xl border border-emerald-900/50 shadow-inner backdrop-blur-sm">
               {/* 2026 Section Button */}

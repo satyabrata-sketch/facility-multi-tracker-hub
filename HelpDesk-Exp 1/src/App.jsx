@@ -127,8 +127,8 @@ export default function App() {
         });
 
 
-        // 3. Strictly eliminate all duplicates, keeping only unique records
-        const uniqueTickets = deduplicateTickets(formatted);
+        // 3. Keep all valid tickets
+        const uniqueTickets = formatted;
 
         // 4. SORT ASCENDING BY SR NO: Sr no 1 must show from the beginning!
         const sorted = [...uniqueTickets].sort((a, b) => {

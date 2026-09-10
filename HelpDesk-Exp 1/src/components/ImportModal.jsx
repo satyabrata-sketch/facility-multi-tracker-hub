@@ -59,7 +59,7 @@ export default function ImportModal({
           console.warn(`Error parsing sheet ${s}:`, e);
         }
       });
-      return { tickets: deduplicateTickets(combined), duplicatesFiltered: totalDups };
+      return { tickets: combined, duplicatesFiltered: totalDups };
     }
     return parseSheetToTickets(
       wb,

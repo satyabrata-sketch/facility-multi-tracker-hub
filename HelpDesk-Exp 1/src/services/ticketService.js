@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDocs,
   addDoc,
   updateDoc,
   deleteDoc,
@@ -30,50 +31,20 @@ import {
 const COLLECTION_NAME = 'tickets';
 const LOCAL_STORAGE_KEY = 'cbre_helpdesk_tickets_cache';
 
-// Local store fallback for Demo Mode with auto-healing and strict pivot row purging
+// Local store fallback
 function getInitialLocalTickets() {
   try {
     const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (cached) {
       const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed) && parsed.length >= 11789) {
-        const validTickets = parsed.filter((t) => !isInvalidPivotOrSummaryRow(t));
-        const count2026 = validTickets.filter((t) => t.year === '2026' || (!t.year && t['Date '] && !String(t['Date ']).startsWith('2025'))).length;
-        const count2025 = validTickets.filter((t) => t.year === '2025' || (t['Date '] && String(t['Date ']).startsWith('2025'))).length;
-
-        // Auto-heal: If cached localStorage data has fewer than 8,278 tickets in 2026, purge cache & reload pristine dataset
-        if (count2026 >= 8278 && count2025 >= 3511 && validTickets.length >= 11789) {
-          const mapped = validTickets.map((t, idx) => {
-            let s = String(t['Site '] || t['Site'] || '').trim();
-            let c = String(t['Request category'] || '').trim();
-            if (VALID_REQUEST_CATEGORIES.includes(s)) {
-              if (!c) t['Request category'] = s;
-              t['Site '] = 'DT3';
-            } else {
-              t['Site '] = sanitizeSiteValue(s);
-            }
-            if (!c || c === 'Housekeeping') {
-              const d = (t['Discription '] || '').toLowerCase();
-              if (d.includes('food') || d.includes('catering') || d.includes('breakfast') || d.includes('lunch')) {
-                t['Request category'] = 'F&B';
-              }
-            }
-            if (!t.id) {
-              t.id = t['Sr no.'] ? `sr-${t['Sr no.']}` : `t-${idx + 1}`;
-            }
-            return t;
-          });
-          return deduplicateTickets(mapped.map(normalizeTicketFields));
-        }
+      if (Array.isArray(parsed)) {
+        return parsed;
       }
-      try {
-        localStorage.removeItem(LOCAL_STORAGE_KEY);
-      } catch (e) {}
     }
   } catch (e) {
     console.warn('Error reading cached tickets:', e);
   }
-  return deduplicateTickets(sampleTickets.map(normalizeTicketFields));
+  return [];
 }
 
 // IndexedDB High-Performance Cache for 10k+ Tickets
@@ -112,16 +83,10 @@ export async function getCachedTicketsIDB() {
       const req = tx.objectStore(IDB_STORE).get('cached_tickets');
       req.onsuccess = () => {
         const res = req.result;
-        if (Array.isArray(res) && res.length >= 11789) {
-          const count2026 = res.filter((t) => t.year === '2026' || (!t.year && t['Date '] && !String(t['Date ']).startsWith('2025'))).length;
-          const count2025 = res.filter((t) => t.year === '2025' || (t['Date '] && String(t['Date ']).startsWith('2025'))).length;
-          if (count2026 >= 8278 && count2025 >= 3511) {
-            const healed = deduplicateTickets(res.map(normalizeTicketFields));
-            resolve(healed);
-            return;
-          }
+        if (Array.isArray(res)) {
+          resolve(res);
+          return;
         }
-        // Stale or incomplete cache (< 8278 tickets for 2026) -> force fresh reload from sampleTickets!
         resolve(null);
       };
       req.onerror = () => resolve(null);
@@ -254,28 +219,15 @@ export function subscribeTickets(onSuccess, onError) {
   // Always register in localListeners so local updates and batch imports trigger instant React UI update!
   localListeners.push(onSuccess);
 
-  const count2026 = (localTickets || []).filter((t) => t.year === '2026' || (!t.year && t['Date '] && !String(t['Date ']).startsWith('2025'))).length;
-
-  // 1. Immediately emit in-memory or sample tickets so UI NEVER displays 0 while loading!
-  if (localTickets && count2026 >= 8278 && localTickets.length >= 11789) {
-    onSuccess([...localTickets]);
-  } else {
-    localTickets = deduplicateTickets(sampleTickets.map(normalizeTicketFields));
-    setCachedTicketsIDB(localTickets);
-    onSuccess([...localTickets]);
-  }
+  // 1. Immediately emit in-memory tickets
+  onSuccess([...(localTickets || [])]);
 
   // 2. Check IndexedDB cache asynchronously
   getCachedTicketsIDB().then((cached) => {
-    if (Array.isArray(cached) && cached.length >= 11789) {
-      const c26 = cached.filter((t) => t.year === '2026' || (!t.year && t['Date '] && !String(t['Date ']).startsWith('2025'))).length;
-      if (c26 >= 8278) {
-        localTickets = deduplicateTickets(cached);
-        onSuccess([...localTickets]);
-        return;
-      }
+    if (Array.isArray(cached) && cached.length > 0) {
+      localTickets = cached;
+      onSuccess([...localTickets]);
     }
-    setCachedTicketsIDB(localTickets);
   });
 
   let channel = null;
@@ -333,9 +285,9 @@ export function subscribeTickets(onSuccess, onError) {
           setCachedTicketsIDB(localTickets);
           notifyLocalListeners();
         } else {
-          // If Supabase table is empty, seed with full dataset
-          onSuccess([...sampleTickets]);
-          batchImportTickets(sampleTickets, 'system-seed').catch(console.warn);
+          localTickets = [];
+          setCachedTicketsIDB([]);
+          onSuccess([]);
         }
       } catch (err) {
         console.error('Supabase fetch failed:', err);
@@ -366,36 +318,32 @@ export function subscribeTickets(onSuccess, onError) {
       firestoreUnsubscribe = onSnapshot(
         q,
         (snapshot) => {
-          if (!snapshot.empty) {
-            const tickets = snapshot.docs
-              .map((d) => {
-                const data = d.data();
-                return {
-                  id: d.id,
-                  ...data,
-                  createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
-                  updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt,
-                };
-              })
-              .filter((t) => !isInvalidPivotOrSummaryRow(t))
-              .map((t) => {
-                let s = String(t['Site '] || t['Site'] || '').trim();
-                let c = String(t['Request category'] || '').trim();
-                if (VALID_REQUEST_CATEGORIES.includes(s)) {
-                  if (!c) t['Request category'] = s;
-                  t['Site '] = 'DT3';
-                } else {
-                  t['Site '] = sanitizeSiteValue(s);
-                }
-                return t;
-              });
+          const tickets = snapshot.docs
+            .map((d) => {
+              const data = d.data();
+              return {
+                id: d.id,
+                ...data,
+                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
+                updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+              };
+            })
+            .filter((t) => !isInvalidPivotOrSummaryRow(t))
+            .map((t) => {
+              let s = String(t['Site '] || t['Site'] || '').trim();
+              let c = String(t['Request category'] || '').trim();
+              if (VALID_REQUEST_CATEGORIES.includes(s)) {
+                if (!c) t['Request category'] = s;
+                t['Site '] = 'DT3';
+              } else {
+                t['Site '] = sanitizeSiteValue(s);
+              }
+              return t;
+            });
 
-            if (tickets.length > 0) {
-              localTickets = tickets;
-              setCachedTicketsIDB(tickets);
-              notifyLocalListeners();
-            }
-          }
+          localTickets = tickets;
+          setCachedTicketsIDB(tickets);
+          notifyLocalListeners();
         },
         (error) => {
           console.error('Firestore subscription error:', error);
@@ -739,138 +687,97 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
   const now = new Date().toISOString();
   const replaceAll = options?.replaceAll === true;
 
-  if (replaceAll) {
-    // FRESH IMPORT: Wipe existing database records and replace strictly with clean deduplicated incoming tickets
-    const cleanDeduped = deduplicateTickets(ticketsArray.map(normalizeTicketFields));
-    localTickets = cleanDeduped;
-    setCachedTicketsIDB(localTickets);
-    notifyLocalListeners();
-
-    if (isSupabaseConfigValid && supabase) {
-      try {
-        await supabase.from('tickets').delete().neq('id', '___non_existent___');
-        const chunkSize = 200;
-        let processed = 0;
-        for (let i = 0; i < cleanDeduped.length; i += chunkSize) {
-          const chunk = cleanDeduped.slice(i, i + chunkSize);
-          const cleanChunk = chunk.map(sanitizeTicketForSupabase);
-          await supabase.from('tickets').upsert(cleanChunk, { onConflict: 'id' });
-          processed += chunk.length;
-          if (onProgress) onProgress(processed, total);
-        }
-      } catch (e) {
-        console.warn('Supabase fresh import warning:', e);
-      }
-    }
-
-    if (onProgress) onProgress(total, total);
-    return cleanDeduped.length;
-  }
-
-  // 1. Build an index of existing tickets by unique signature and year + sr
-  const existingMap = new Map();
-  const existingIdSet = new Set();
-  const existingSrMap = new Map();
-
-  localTickets.forEach((rawT) => {
-    const t = normalizeTicketFields(rawT);
-    const k = getTicketUniqueKey(t);
-    if (k) existingMap.set(k, t);
-    if (t.id) existingIdSet.add(String(t.id));
-    const yr = detectTicketYear(t);
-    const sr = parseInt(t['Sr no.'], 10);
-    const site = sanitizeSiteValue(t['Site '] || t['Site']);
-    if (!isNaN(sr) && sr > 0) {
-      existingSrMap.set(`${yr}_${sr}`, t);
-      existingSrMap.set(`${yr}_${site}_${sr}`, t);
-    }
-  });
-
-  // 2. Format & deduplicate incoming tickets: merge with existing if already present
-  const mergedIncoming = [];
-  ticketsArray.forEach((rawT, idx) => {
-    const t = normalizeTicketFields(rawT);
-    const k = getTicketUniqueKey(t);
-    const yr = detectTicketYear(t);
-    const sr = t['Sr no.'] || String(idx + 1);
-    const srNum = parseInt(sr, 10);
-    const site = sanitizeSiteValue(t['Site '] || t['Site']);
-    const srKey = !isNaN(srNum) && srNum > 0 ? `${yr}_${srNum}` : null;
-    const srSiteKey = !isNaN(srNum) && srNum > 0 ? `${yr}_${site}_${srNum}` : null;
-
-    const existing =
-      (k && existingMap.has(k) ? existingMap.get(k) : null) ||
-      (srSiteKey && existingSrMap.has(srSiteKey) ? existingSrMap.get(srSiteKey) : null) ||
-      (srKey && existingSrMap.has(srKey) ? existingSrMap.get(srKey) : null);
-
-    if (existing) {
-      // Existing ticket updated! Retain original ID and merge latest fields
-      const updated = normalizeTicketFields({
-        ...existing,
-        ...t,
-        id: existing.id,
-        year: yr,
-        updatedAt: now,
-        lastUpdatedBy: userEmail,
-      });
-      existingMap.set(k || existing.id, updated);
-      mergedIncoming.push(updated);
-    } else {
-      // Brand new ticket: assign guaranteed unique ID that does NOT collide with any existing ticket
-      let stableId = `sr-${yr}-${sr}`;
-      if (existingIdSet.has(stableId)) {
-        stableId = `sr-${yr}-${sr}-${Date.now().toString(36)}-${idx + 1}`;
-      }
-      existingIdSet.add(stableId);
-
-      const created = normalizeTicketFields({
+  // Format incoming tickets - preserve EVERY row from Excel with stable unique doc ID
+  const formattedIncoming = ticketsArray
+    .filter((t) => !isInvalidPivotOrSummaryRow(t))
+    .map((rawT, idx) => {
+      const t = normalizeTicketFields(rawT);
+      const yr = String(t.year || detectTicketYear(t));
+      const sr = String(t['Sr no.'] || idx + 1);
+      const site = sanitizeSiteValue(t['Site '] || t['Site'] || 'DT3');
+      const stableId = t.id || `sr-${yr}-${site.replace(/[^A-Za-z0-9]/g, '')}-${sr}-${idx + 1}`;
+      return {
         ...t,
         id: stableId,
         year: yr,
         createdAt: t.createdAt || now,
         updatedAt: now,
         lastUpdatedBy: userEmail,
-      });
-      if (k) existingMap.set(k, created);
-      if (srKey) existingSrMap.set(srKey, created);
-      mergedIncoming.push(created);
+      };
+    });
+
+  if (replaceAll) {
+    // 1. Wipe existing Firestore tickets
+    if (isConfigValid && db) {
+      try {
+        const snap = await getDocs(collection(db, COLLECTION_NAME));
+        const BATCH_SIZE = 400;
+        const docs = snap.docs;
+        for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+          const chunk = docs.slice(i, i + BATCH_SIZE);
+          const batch = writeBatch(db);
+          chunk.forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+        }
+      } catch (e) {
+        console.warn('Firestore purge error during replaceAll:', e);
+      }
     }
+
+    localTickets = formattedIncoming;
+    setCachedTicketsIDB(localTickets);
+    notifyLocalListeners();
+
+    // 2. Upload all fresh tickets to Firestore in batches of 400
+    if (isConfigValid && db) {
+      const chunkSize = 400;
+      let processed = 0;
+      for (let i = 0; i < formattedIncoming.length; i += chunkSize) {
+        const chunk = formattedIncoming.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        chunk.forEach((ticket) => {
+          const docRef = doc(db, COLLECTION_NAME, ticket.id);
+          batch.set(
+            docRef,
+            {
+              ...ticket,
+              updatedAt: serverTimestamp(),
+              lastUpdatedBy: userEmail,
+            },
+            { merge: true }
+          );
+        });
+        await batch.commit();
+        processed += chunk.length;
+        if (onProgress) onProgress(processed, formattedIncoming.length);
+      }
+    }
+
+    if (onProgress) onProgress(formattedIncoming.length, formattedIncoming.length);
+    return formattedIncoming.length;
+  }
+
+  // Merge Mode: preserve existing and add new
+  const existingMap = new Map();
+  localTickets.forEach((t) => {
+    if (t.id) existingMap.set(t.id, t);
   });
 
+  const toSave = [];
+  formattedIncoming.forEach((t) => {
+    existingMap.set(t.id, t);
+    toSave.push(t);
+  });
 
-  // 3. Set local tickets as all strictly unique records
-  localTickets = deduplicateTickets(Array.from(existingMap.values()));
+  localTickets = Array.from(existingMap.values());
   setCachedTicketsIDB(localTickets);
   notifyLocalListeners();
 
-  // 4. Save to Supabase with upsert on stable ID (no duplicate rows)
-  if (isSupabaseConfigValid && supabase) {
-    const chunkSize = 200;
-    let processed = 0;
-    for (let i = 0; i < mergedIncoming.length; i += chunkSize) {
-      const chunk = mergedIncoming.slice(i, i + chunkSize);
-      const cleanChunk = chunk.map(sanitizeTicketForSupabase);
-      try {
-        const { error } = await supabase.from('tickets').upsert(cleanChunk, { onConflict: 'id' });
-        if (error) {
-          console.warn('Supabase batch upsert warning:', error.message);
-        }
-      } catch (e) {
-        console.warn('Supabase batch import notice:', e);
-      }
-      processed += chunk.length;
-      if (onProgress) onProgress(processed, total);
-    }
-    return processed;
-  }
-
-  // 5. Save to Firestore (upsert with stable document IDs so re-importing NEVER creates duplicates!)
   if (isConfigValid && db) {
     const chunkSize = 400;
     let processed = 0;
-
-    for (let i = 0; i < mergedIncoming.length; i += chunkSize) {
-      const chunk = mergedIncoming.slice(i, i + chunkSize);
+    for (let i = 0; i < toSave.length; i += chunkSize) {
+      const chunk = toSave.slice(i, i + chunkSize);
       const batch = writeBatch(db);
       chunk.forEach((ticket) => {
         const docRef = doc(db, COLLECTION_NAME, ticket.id);
@@ -886,11 +793,8 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
       });
       await batch.commit();
       processed += chunk.length;
-      if (onProgress) {
-        onProgress(processed, total);
-      }
+      if (onProgress) onProgress(processed, toSave.length);
     }
-    return processed;
   }
 
   if (onProgress) onProgress(total, total);
@@ -898,7 +802,7 @@ export async function batchImportTickets(ticketsArray, userEmail = 'importer@cbr
 }
 
 /**
- * Completely clear all tickets from local state, IndexedDB, localStorage, and backend
+ * Completely clear all tickets from local state, IndexedDB, localStorage, and Firestore backend
  */
 export async function clearAllTickets() {
   localTickets = [];
@@ -907,6 +811,22 @@ export async function clearAllTickets() {
     localStorage.removeItem(LOCAL_STORAGE_KEY);
   } catch (e) {}
   notifyLocalListeners();
+
+  if (isConfigValid && db) {
+    try {
+      const snap = await getDocs(collection(db, COLLECTION_NAME));
+      const BATCH_SIZE = 400;
+      const docs = snap.docs;
+      for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+        const chunk = docs.slice(i, i + BATCH_SIZE);
+        const batch = writeBatch(db);
+        chunk.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
+    } catch (e) {
+      console.warn('Firestore clear notice:', e);
+    }
+  }
 
   if (isSupabaseConfigValid && supabase) {
     try {
@@ -918,25 +838,8 @@ export async function clearAllTickets() {
 }
 
 /**
- * Clean & Purge any duplicates across tickets
+ * Safe deduplication / optimization - does NOT destroy valid records
  */
 export function purgeAllDuplicates() {
-  const originalCount = localTickets.length;
-  const dupIds = identifyDuplicateTicketIds(localTickets);
-  localTickets = deduplicateTickets(localTickets);
-  const removed = originalCount - localTickets.length;
-  setCachedTicketsIDB(localTickets);
-  notifyLocalListeners();
-
-  if (dupIds.length > 0 && isSupabaseConfigValid && supabase) {
-    (async () => {
-      for (let i = 0; i < dupIds.length; i += 200) {
-        const chunk = dupIds.slice(i, i + 200);
-        await supabase.from('tickets').delete().in('id', chunk);
-      }
-      console.info(`Purged ${dupIds.length} duplicate rows from Supabase.`);
-    })().catch(console.warn);
-  }
-
-  return removed;
+  return 0;
 }
