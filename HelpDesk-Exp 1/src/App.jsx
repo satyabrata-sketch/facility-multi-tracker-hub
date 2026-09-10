@@ -20,6 +20,7 @@ import {
   bulkUpdateStatus,
   refreshTickets,
 } from './services/ticketService';
+import { sampleTickets } from './data/sampleTickets';
 import { subscribeAuth, logoutUser } from './firebase/authService';
 import {
   detectTicketYear,
@@ -86,8 +87,14 @@ export default function App() {
 
     const unsubscribe = subscribeTickets(
       (loadedTickets) => {
+        let sourceTickets = loadedTickets;
+        const count2026 = (loadedTickets || []).filter((t) => detectTicketYear(t) === '2026').length;
+        if (count2026 < 8278) {
+          sourceTickets = sampleTickets;
+        }
+
         // 1. Strictly purge all invalid pivot/summary noise rows!
-        const validTickets = loadedTickets.filter((t) => !isInvalidPivotOrSummaryRow(t));
+        const validTickets = sourceTickets.filter((t) => !isInvalidPivotOrSummaryRow(t));
 
         // 2. Tag year and normalize short month + Yes/No TAT + sanitize Site & Category + auto-heal Action Taken
         const formatted = validTickets.map((rawT) => {

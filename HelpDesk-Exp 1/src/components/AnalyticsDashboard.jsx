@@ -262,9 +262,9 @@ export default function AnalyticsDashboard({
     ]
   );
 
-  // Guarantee strictly unique records with zero duplicate or noise rows
+  // Tickets supplied by App.jsx are already deduplicated and normalized
   const cleanTickets = useMemo(() => {
-    return deduplicateTickets(allTickets);
+    return Array.isArray(allTickets) ? allTickets : [];
   }, [allTickets]);
 
   // Year tickets count

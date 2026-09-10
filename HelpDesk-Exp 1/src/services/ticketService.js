@@ -36,44 +36,39 @@ function getInitialLocalTickets() {
     const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (cached) {
       const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed) && parsed.length >= 11789) {
         const validTickets = parsed.filter((t) => !isInvalidPivotOrSummaryRow(t));
-
-        // Auto-heal: If cached localStorage data lacks Action Taken or has fewer than 8,250 tickets in 2026, purge cache & reload pristine dataset
         const count2026 = validTickets.filter((t) => t.year === '2026' || (!t.year && t['Date '] && !String(t['Date ']).startsWith('2025'))).length;
-        const sample2025 = validTickets.find((t) => t.year === '2025' || (t['Date '] && String(t['Date ']).startsWith('2025')));
-        const sample2026 = validTickets.find((t) => (t.year === '2026' || !t.year) && t['Sr no.'] && parseInt(t['Sr no.'], 10) <= 50);
-        const lacks2025 = sample2025 && !(sample2025['Action Taken '] || sample2025['Action taken ']);
-        const lacks2026 = sample2026 && !(sample2026['Action Taken '] || sample2026['Action taken ']);
-        if (lacks2025 || lacks2026 || count2026 < 8250 || validTickets.length < 11700) {
-          try {
-            localStorage.removeItem(LOCAL_STORAGE_KEY);
-          } catch (e) {}
-          return deduplicateTickets(sampleTickets.map(normalizeTicketFields));
-        }
+        const count2025 = validTickets.filter((t) => t.year === '2025' || (t['Date '] && String(t['Date ']).startsWith('2025'))).length;
 
-        const mapped = validTickets.map((t, idx) => {
-          let s = String(t['Site '] || t['Site'] || '').trim();
-          let c = String(t['Request category'] || '').trim();
-          if (VALID_REQUEST_CATEGORIES.includes(s)) {
-            if (!c) t['Request category'] = s;
-            t['Site '] = 'DT3';
-          } else {
-            t['Site '] = sanitizeSiteValue(s);
-          }
-          if (!c || c === 'Housekeeping') {
-            const d = (t['Discription '] || '').toLowerCase();
-            if (d.includes('food') || d.includes('catering') || d.includes('breakfast') || d.includes('lunch')) {
-              t['Request category'] = 'F&B';
+        // Auto-heal: If cached localStorage data has fewer than 8,278 tickets in 2026, purge cache & reload pristine dataset
+        if (count2026 >= 8278 && count2025 >= 3511 && validTickets.length >= 11789) {
+          const mapped = validTickets.map((t, idx) => {
+            let s = String(t['Site '] || t['Site'] || '').trim();
+            let c = String(t['Request category'] || '').trim();
+            if (VALID_REQUEST_CATEGORIES.includes(s)) {
+              if (!c) t['Request category'] = s;
+              t['Site '] = 'DT3';
+            } else {
+              t['Site '] = sanitizeSiteValue(s);
             }
-          }
-          if (!t.id) {
-            t.id = t['Sr no.'] ? `sr-${t['Sr no.']}` : `t-${idx + 1}`;
-          }
-          return t;
-        });
-        return deduplicateTickets(mapped.map(normalizeTicketFields));
+            if (!c || c === 'Housekeeping') {
+              const d = (t['Discription '] || '').toLowerCase();
+              if (d.includes('food') || d.includes('catering') || d.includes('breakfast') || d.includes('lunch')) {
+                t['Request category'] = 'F&B';
+              }
+            }
+            if (!t.id) {
+              t.id = t['Sr no.'] ? `sr-${t['Sr no.']}` : `t-${idx + 1}`;
+            }
+            return t;
+          });
+          return deduplicateTickets(mapped.map(normalizeTicketFields));
+        }
       }
+      try {
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+      } catch (e) {}
     }
   } catch (e) {
     console.warn('Error reading cached tickets:', e);
@@ -82,13 +77,18 @@ function getInitialLocalTickets() {
 }
 
 // IndexedDB High-Performance Cache for 10k+ Tickets
-const IDB_NAME = 'CBRE_Helpdesk_DB_v4';
+const IDB_NAME = 'CBRE_Helpdesk_DB_v6';
 const IDB_STORE = 'tickets_store';
 
 function openTicketsIDB() {
   return new Promise((resolve) => {
     if (typeof indexedDB === 'undefined') return resolve(null);
     try {
+      // Proactively purge obsolete previous databases
+      ['CBRE_Helpdesk_DB_v1', 'CBRE_Helpdesk_DB_v2', 'CBRE_Helpdesk_DB_v3', 'CBRE_Helpdesk_DB_v4', 'CBRE_Helpdesk_DB_v5'].forEach((old) => {
+        try { indexedDB.deleteDatabase(old); } catch (e) {}
+      });
+
       const req = indexedDB.open(IDB_NAME, 1);
       req.onupgradeneeded = () => {
         try {
@@ -112,20 +112,17 @@ export async function getCachedTicketsIDB() {
       const req = tx.objectStore(IDB_STORE).get('cached_tickets');
       req.onsuccess = () => {
         const res = req.result;
-        if (Array.isArray(res) && res.length >= 11700) {
-          const sample2025 = res.find((t) => t.year === '2025' || (t['Date '] && String(t['Date ']).startsWith('2025')));
-          const sample2026 = res.find((t) => (t.year === '2026' || !t.year) && t['Sr no.'] && parseInt(t['Sr no.'], 10) <= 50);
-          const lacks2025 = sample2025 && !(sample2025['Action Taken '] || sample2025['Action taken ']);
-          const lacks2026 = sample2026 && !(sample2026['Action Taken '] || sample2026['Action taken ']);
-          const healed = deduplicateTickets(res.map(normalizeTicketFields));
-          if (lacks2025 || lacks2026) {
-            console.info('Auto-healing stale IndexedDB cache lacking Action Taken in 2025/2026...');
-            setCachedTicketsIDB(healed);
+        if (Array.isArray(res) && res.length >= 11789) {
+          const count2026 = res.filter((t) => t.year === '2026' || (!t.year && t['Date '] && !String(t['Date ']).startsWith('2025'))).length;
+          const count2025 = res.filter((t) => t.year === '2025' || (t['Date '] && String(t['Date ']).startsWith('2025'))).length;
+          if (count2026 >= 8278 && count2025 >= 3511) {
+            const healed = deduplicateTickets(res.map(normalizeTicketFields));
+            resolve(healed);
+            return;
           }
-          resolve(healed);
-        } else {
-          resolve(null);
         }
+        // Stale or incomplete cache (< 8278 tickets for 2026) -> force fresh reload from sampleTickets!
+        resolve(null);
       };
       req.onerror = () => resolve(null);
     } catch (e) {
@@ -257,22 +254,28 @@ export function subscribeTickets(onSuccess, onError) {
   // Always register in localListeners so local updates and batch imports trigger instant React UI update!
   localListeners.push(onSuccess);
 
+  const count2026 = (localTickets || []).filter((t) => t.year === '2026' || (!t.year && t['Date '] && !String(t['Date ']).startsWith('2025'))).length;
+
   // 1. Immediately emit in-memory or sample tickets so UI NEVER displays 0 while loading!
-  if (localTickets && localTickets.length >= 11700) {
+  if (localTickets && count2026 >= 8278 && localTickets.length >= 11789) {
     onSuccess([...localTickets]);
   } else {
     localTickets = deduplicateTickets(sampleTickets.map(normalizeTicketFields));
+    setCachedTicketsIDB(localTickets);
     onSuccess([...localTickets]);
   }
 
   // 2. Check IndexedDB cache asynchronously
   getCachedTicketsIDB().then((cached) => {
-    if (Array.isArray(cached) && cached.length >= 11700) {
-      localTickets = deduplicateTickets(cached);
-      onSuccess([...localTickets]);
-    } else {
-      setCachedTicketsIDB(localTickets);
+    if (Array.isArray(cached) && cached.length >= 11789) {
+      const c26 = cached.filter((t) => t.year === '2026' || (!t.year && t['Date '] && !String(t['Date ']).startsWith('2025'))).length;
+      if (c26 >= 8278) {
+        localTickets = deduplicateTickets(cached);
+        onSuccess([...localTickets]);
+        return;
+      }
     }
+    setCachedTicketsIDB(localTickets);
   });
 
   let channel = null;
